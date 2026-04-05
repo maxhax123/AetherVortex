@@ -184,6 +184,7 @@
       color: var(--ui);
       cursor: pointer;
       z-index: 1;
+      pointer-events: auto;
     }
 
     .pause-toggle.inline {
@@ -569,6 +570,12 @@
       display: block;
     }
 
+    .boss-preview-canvas {
+      width: 128px;
+      height: 128px;
+      display: block;
+    }
+
     .boss-preview-svg .preview-spin-slow,
     .boss-preview-svg .preview-spin-mid,
     .boss-preview-svg .preview-spin-fast,
@@ -702,6 +709,13 @@
       color: #74ff9f;
       font-size: 13px;
       letter-spacing: 0.16em;
+    }
+
+    .status-deceased {
+      color: #ff6b6b;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-shadow: 0 0 12px rgba(255, 80, 80, 0.24);
     }
 
     .locked-cross {
@@ -848,6 +862,58 @@
       gap: 10px;
       pointer-events: none;
       z-index: 6;
+    }
+
+    .achievement-feed {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      width: min(340px, calc(100vw - 24px));
+      display: grid;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 7;
+    }
+
+    .achievement-toast {
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 215, 106, 0.28);
+      background:
+        linear-gradient(180deg, rgba(20, 12, 30, 0.94), rgba(10, 6, 16, 0.9));
+      box-shadow:
+        0 0 24px rgba(255, 215, 106, 0.14),
+        inset 0 0 18px rgba(255, 255, 255, 0.03);
+      opacity: 0;
+      transform: translateY(12px);
+      animation: achievement-slide 3.2s ease forwards;
+    }
+
+    .achievement-toast-title {
+      color: var(--gold-hot);
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .achievement-toast-name {
+      color: var(--ui);
+      font-size: 18px;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+
+    .achievement-toast-copy {
+      color: var(--ui-dim);
+      font-size: 11px;
+      line-height: 1.45;
+      letter-spacing: 0.08em;
+    }
+
+    @keyframes achievement-slide {
+      0% { opacity: 0; transform: translateY(12px); }
+      10%, 82% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-6px); }
     }
 
     .mobile-cluster {
@@ -1239,6 +1305,8 @@
     </div>
   </div>
 
+  <div class="achievement-feed" id="achievementFeed" aria-live="polite" aria-atomic="false"></div>
+
   <div class="overlay show" id="overlay">
     <div class="message">
       <h1>Enter The Vortex</h1>
@@ -1258,6 +1326,7 @@
       const bossHud = document.querySelector(".boss-hud");
       const pauseButton = document.getElementById("pauseButton");
       const mobileControls = document.getElementById("mobileControls");
+      const achievementFeed = document.getElementById("achievementFeed");
       const scoreValue = document.getElementById("scoreValue");
       const chronoValue = document.getElementById("chronoValue");
       const chronoFill = document.getElementById("chronoFill");
@@ -1327,6 +1396,12 @@
           active: true,
           status: "ACTIVE",
           teaser: "A matte dark-brown fractal monarch now leans into your flight path, forcing the arena to tighten over time."
+        },
+        {
+          name: "Spot Reserved",
+          active: false,
+          status: "RESERVED",
+          teaser: "This containment slot is reserved for a future boss encounter."
         },
         {
           name: "Spot Reserved",
@@ -1502,6 +1577,7 @@
         loadingLoadedAssets: 0,
         loadingTotalAssets: 0,
         loadingFailedAssets: 0,
+        achievementToasts: [],
         impactFrames: {
           damage: 0,
           special: 0,
@@ -1880,6 +1956,42 @@
         osc.stop(now + 0.32);
       }
 
+      function playAchievementCue() {
+        ensureAudio();
+        const now = audioContext.currentTime;
+        const oscA = audioContext.createOscillator();
+        const oscB = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+
+        oscA.type = "triangle";
+        oscB.type = "sine";
+        oscA.frequency.setValueAtTime(740, now);
+        oscA.frequency.exponentialRampToValueAtTime(1110, now + 0.12);
+        oscA.frequency.exponentialRampToValueAtTime(1480, now + 0.26);
+        oscB.frequency.setValueAtTime(1480, now);
+        oscB.frequency.exponentialRampToValueAtTime(2220, now + 0.22);
+
+        filter.type = "highpass";
+        filter.frequency.setValueAtTime(320, now);
+        filter.Q.value = 0.7;
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.09, now + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.05, now + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+
+        oscA.connect(filter);
+        oscB.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterGain);
+
+        oscA.start(now);
+        oscB.start(now + 0.015);
+        oscA.stop(now + 0.42);
+        oscB.stop(now + 0.32);
+      }
+
       function setScreenShake(enabled) {
         state.settings.screenShake = enabled;
         localStorage.setItem("aether_vortex_screen_shake", String(enabled));
@@ -1898,6 +2010,42 @@
         if (boss1Music) boss1Music.volume = bossVolume;
         if (boss2Music) boss2Music.volume = bossVolume;
         if (boss3Music) boss3Music.volume = bossVolume;
+      }
+
+      function enqueueAchievementToast(id) {
+        const def = achievementDefs[id];
+        if (!def) return;
+        state.achievementToasts.push({
+          id: `${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          title: def.title,
+          desc: def.desc,
+          life: 3.2
+        });
+        if (state.achievementToasts.length > 4) {
+          state.achievementToasts.splice(0, state.achievementToasts.length - 4);
+        }
+      }
+
+      function renderAchievementFeed() {
+        achievementFeed.innerHTML = state.achievementToasts.map((toast) => `
+          <div class="achievement-toast">
+            <div class="achievement-toast-title">Achievement Unlocked</div>
+            <div class="achievement-toast-name">${toast.title}</div>
+            <div class="achievement-toast-copy">${toast.desc}</div>
+          </div>
+        `).join("");
+      }
+
+      function updateAchievementFeed(dt) {
+        let dirty = false;
+        for (let i = state.achievementToasts.length - 1; i >= 0; i--) {
+          state.achievementToasts[i].life -= dt;
+          if (state.achievementToasts[i].life <= 0) {
+            state.achievementToasts.splice(i, 1);
+            dirty = true;
+          }
+        }
+        if (dirty) renderAchievementFeed();
       }
 
       function saveProfile() {
@@ -1977,6 +2125,9 @@
           unlockedAt: new Date().toISOString(),
           title: achievementDefs[id]?.title || id
         };
+        enqueueAchievementToast(id);
+        renderAchievementFeed();
+        playAchievementCue();
         saveProfile();
       }
 
@@ -2111,79 +2262,10 @@
       }
 
       function getBossPreviewMarkup(index, animated = false) {
-        const animatedClass = animated ? "animated" : "";
-        const previews = [
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <defs>
-              <radialGradient id="architectGlow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#fff7dd" stop-opacity="0.95" />
-                <stop offset="22%" stop-color="#ffd76a" stop-opacity="0.75" />
-                <stop offset="58%" stop-color="#a54cff" stop-opacity="0.42" />
-                <stop offset="100%" stop-color="#a54cff" stop-opacity="0" />
-              </radialGradient>
-            </defs>
-            <g class="preview-spin-slow">
-              <path d="M18 64C28 40 100 40 110 64C100 88 28 88 18 64Z" fill="none" stroke="rgba(255,215,106,0.82)" stroke-width="2.1" />
-              <path d="M34 20C58 30 72 98 54 108C32 92 18 42 34 20Z" fill="none" stroke="rgba(165,76,255,0.72)" stroke-width="1.7" />
-              <path d="M94 20C110 42 96 92 74 108C56 100 70 32 94 20Z" fill="none" stroke="rgba(255,232,180,0.54)" stroke-width="1.4" />
-            </g>
-            <circle class="preview-pulse" cx="64" cy="64" r="18" fill="url(#architectGlow)" />
-          </svg></div>`,
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <defs>
-              <radialGradient id="nucleusGlow" cx="50%" cy="50%" r="52%">
-                <stop offset="0%" stop-color="#0f1118" />
-                <stop offset="60%" stop-color="#17181f" />
-                <stop offset="100%" stop-color="rgba(255,215,106,0)" />
-              </radialGradient>
-            </defs>
-            <g class="preview-spin-mid">
-              <ellipse cx="64" cy="64" rx="50" ry="26" fill="none" stroke="rgba(255,215,106,0.64)" stroke-width="1.6" transform="rotate(18 64 64)" />
-              <ellipse cx="64" cy="64" rx="56" ry="20" fill="none" stroke="rgba(255,215,106,0.3)" stroke-width="1.1" transform="rotate(-24 64 64)" />
-            </g>
-            <path class="preview-spin-fast" d="M64 28L76 48L100 52L84 68L88 92L64 82L40 92L44 68L28 52L52 48Z" fill="none" stroke="rgba(255,215,106,0.44)" stroke-width="1.8" />
-            <circle class="preview-pulse" cx="64" cy="64" r="28" fill="url(#nucleusGlow)" stroke="rgba(255,245,210,0.12)" stroke-width="1.1" />
-            <g class="preview-orbit">
-              <circle cx="94" cy="42" r="7" fill="rgba(255,250,235,0.95)" />
-              <circle cx="94" cy="42" r="12" fill="none" stroke="rgba(255,215,106,0.4)" stroke-width="1.1" />
-            </g>
-          </svg></div>`,
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <g class="preview-pulse">
-              <circle cx="64" cy="64" r="44" fill="rgba(72, 42, 22, 0.34)" />
-              <polygon points="64,20 94,42 84,92 44,92 34,42" fill="rgba(42,24,14,0.98)" />
-            </g>
-            <g class="preview-spin-mid">
-              <path d="M64 22L76 44L52 44Z" fill="rgba(255,156,90,0.92)" />
-              <path d="M104 92L82 78L82 104Z" fill="rgba(255,156,90,0.82)" />
-              <path d="M24 92L46 78L46 104Z" fill="rgba(255,156,90,0.82)" />
-            </g>
-            <g class="preview-orbit">
-              <path d="M64 16L78 40L50 40Z" fill="rgba(255,170,94,0.95)" />
-              <path d="M102 88L78 74L80 102Z" fill="rgba(255,170,94,0.9)" />
-              <path d="M26 88L50 74L48 102Z" fill="rgba(255,170,94,0.9)" />
-            </g>
-          </svg></div>`,
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <path d="M26 90C42 40 48 30 64 18C80 30 86 40 102 90" fill="none" stroke="rgba(255,166,196,0.58)" stroke-width="2" />
-            <path d="M38 94C50 52 54 42 64 34C74 42 78 52 90 94" fill="none" stroke="rgba(255,232,245,0.52)" stroke-width="1.5" />
-            <circle class="preview-pulse" cx="64" cy="56" r="16" fill="rgba(88,22,48,0.9)" stroke="rgba(255,168,210,0.34)" stroke-width="1.4" />
-            <path d="M22 54L44 64L30 82" fill="none" stroke="rgba(255,190,214,0.54)" stroke-width="2" />
-            <path d="M106 54L84 64L98 82" fill="none" stroke="rgba(255,190,214,0.54)" stroke-width="2" />
-          </svg></div>`,
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <polygon points="28,28 94,18 108,62 76,108 24,92 18,50" fill="rgba(118,150,180,0.18)" stroke="rgba(180,236,255,0.52)" stroke-width="1.7" />
-            <path d="M28 28L60 50L18 50M60 50L76 108M60 50L108 62M60 50L94 18" fill="none" stroke="rgba(220,250,255,0.42)" stroke-width="1.3" />
-            <circle class="preview-pulse" cx="70" cy="56" r="14" fill="rgba(190,238,255,0.18)" stroke="rgba(224,248,255,0.4)" stroke-width="1.2" />
-          </svg></div>`,
-          `<div class="boss-preview ${animatedClass}"><svg class="boss-preview-svg" viewBox="0 0 128 128" aria-hidden="true">
-            <circle class="preview-pulse" cx="64" cy="64" r="40" fill="rgba(58,26,18,0.82)" stroke="rgba(255,142,92,0.38)" stroke-width="1.5" />
-            <path d="M40 28L52 48L36 74L58 68L64 96L70 68L92 74L76 48L88 28L64 42Z" fill="rgba(255,134,74,0.75)" />
-            <circle cx="64" cy="64" r="54" fill="none" stroke="rgba(255,186,112,0.28)" stroke-width="1.1" stroke-dasharray="4 6" />
-            <circle cx="64" cy="64" r="20" fill="rgba(255,226,190,0.2)" />
-          </svg></div>`
-        ];
-        return previews[index] || `<div class="fractal-glyph"></div>`;
+        if (index <= 2) {
+          return `<div class="boss-preview ${animated ? "animated" : ""}"><canvas class="boss-preview-canvas" width="128" height="128" data-boss-preview="${index}" data-boss-animated="${animated ? "true" : "false"}"></canvas></div>`;
+        }
+        return `<div class="fractal-glyph"></div>`;
       }
 
       function renderBossSelect() {
@@ -2194,6 +2276,7 @@
           const focused = index === state.selectedBossIndex ? "focused" : "";
           const preview = getBossPreviewMarkup(index, focused);
           const statusLabel = getBossStatusLabel(index, boss.status);
+          const statusClass = statusLabel === "DECEASED" ? "status-deceased" : "status-active";
           if (boss.active) {
             return `
               <article class="boss-card active ${focused}">
@@ -2203,7 +2286,7 @@
                 </div>
                 <div>
                   <div class="value" style="font-size: 20px;">${boss.name}</div>
-                  <div class="status-active">STATUS: ${statusLabel}</div>
+                  <div class="${statusClass}">STATUS: ${statusLabel}</div>
                   <p class="boss-card-copy" style="margin-top:14px;">${boss.teaser}</p>
                   <button class="boss-card-select menu-hoverable ${focused ? "active" : ""}" data-boss-select="${index}">${focused ? "Selected" : "Inspect"}</button>
                 </div>
@@ -2571,7 +2654,7 @@
 
       function buyHealthBuffer() {
         const cost = 600;
-        if (state.mode !== "paused" || player.healthBufferBuys >= 5 || state.score < cost) return;
+        if (state.mode !== "paused" || player.healthBufferBuys >= 6 || state.score < cost) return;
         state.score -= cost;
         player.healthBufferBuys += 1;
         player.maxHealth += 0.5;
@@ -2597,9 +2680,9 @@
               <div class="shop-item">
                 <strong>Hull Buffer</strong>
                 <span>+0.5 max health and heal 0.5 instantly.</span>
-                <span>Owned ${player.healthBufferBuys} / 5</span>
+                <span>Owned ${player.healthBufferBuys} / 6</span>
                 <span>Cost 600 score</span>
-                <button data-shop="health" ${player.healthBufferBuys >= 5 || state.score < 600 ? "disabled" : ""}>Buy Health</button>
+                <button data-shop="health" ${player.healthBufferBuys >= 6 || state.score < 600 ? "disabled" : ""}>Buy Health</button>
               </div>
             </div>
             <div class="config-actions" style="justify-content:center;">
@@ -3928,6 +4011,7 @@
       function updateGame(rawDt) {
         const dt = clamp(rawDt, 0, 0.033);
         state.rawElapsed += dt;
+        updateAchievementFeed(dt);
         updateImpactFrames(dt);
         updateMusicForState(dt);
         updateTimeControls(dt);
@@ -4142,6 +4226,277 @@
           ctx.fill();
         }
         ctx.restore();
+      }
+
+      function drawArchitectPreview(ctxPreview, time) {
+        const x = 64;
+        const y = 64;
+        const pulse = 30 + Math.sin(time * 4.8) * 7;
+        const gradient = ctxPreview.createRadialGradient(x, y, 0, x, y, pulse * 2.2);
+        gradient.addColorStop(0, "rgba(255, 255, 255, 0.1)");
+        gradient.addColorStop(0.2, "rgba(165, 76, 255, 0.34)");
+        gradient.addColorStop(0.55, "rgba(72, 20, 130, 0.18)");
+        gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctxPreview.fillStyle = gradient;
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, pulse * 2.2, 0, TAU);
+        ctxPreview.fill();
+
+        const coreRadius = 22 + pulse * 0.14;
+        const core = ctxPreview.createRadialGradient(x, y, 0, x, y, coreRadius);
+        core.addColorStop(0, "rgba(255, 255, 255, 0.92)");
+        core.addColorStop(0.18, "rgba(255, 215, 106, 0.5)");
+        core.addColorStop(0.55, "rgba(165, 76, 255, 0.46)");
+        core.addColorStop(1, "rgba(165, 76, 255, 0)");
+        ctxPreview.fillStyle = core;
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, coreRadius, 0, TAU);
+        ctxPreview.fill();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.globalCompositeOperation = "lighter";
+        for (let spoke = 0; spoke < 10; spoke++) {
+          const angle = time * 0.9 + (spoke / 10) * TAU;
+          const inner = 14 + Math.sin(time * 3.2 + spoke) * 4;
+          const outer = pulse * 1.65 + Math.cos(time * 1.7 + spoke) * 10;
+          ctxPreview.strokeStyle = `rgba(255, 215, 106, ${0.07 + (spoke % 2) * 0.03})`;
+          ctxPreview.lineWidth = 1;
+          ctxPreview.beginPath();
+          ctxPreview.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+          ctxPreview.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+          ctxPreview.stroke();
+        }
+        for (let i = 0; i < 4; i++) {
+          ctxPreview.rotate(0.23 + Math.sin(time * 1.1 + i) * 0.03);
+          ctxPreview.strokeStyle = `rgba(165, 76, 255, ${0.14 + i * 0.06})`;
+          ctxPreview.lineWidth = 1.5 + i * 0.35;
+          ctxPreview.beginPath();
+          for (let a = 0; a <= TAU + 0.02; a += 0.08) {
+            const r = pulse + Math.sin(a * (4 + i) + time * (2.4 + i * 0.3)) * (5 + i * 2.6);
+            const px = Math.cos(a) * r;
+            const py = Math.sin(a) * r;
+            if (a === 0) ctxPreview.moveTo(px, py);
+            else ctxPreview.lineTo(px, py);
+          }
+          ctxPreview.closePath();
+          ctxPreview.stroke();
+        }
+        for (let shard = 0; shard < 10; shard++) {
+          const angle = time * 1.8 + (shard / 10) * TAU;
+          const radius = pulse * (1.1 + (shard % 3) * 0.14);
+          ctxPreview.fillStyle = `rgba(255, 215, 106, ${0.12 + (shard % 4) * 0.03})`;
+          ctxPreview.beginPath();
+          ctxPreview.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.8 + (shard % 3) * 0.55, 0, TAU);
+          ctxPreview.fill();
+        }
+        ctxPreview.restore();
+      }
+
+      function drawSovereignPreview(ctxPreview, time) {
+        const x = 64;
+        const y = 64;
+        const phasePulse = 1 + Math.sin(time * 7.2) * 0.08;
+        const nucleusRadius = 36 * phasePulse;
+        const electronOrbit = 42;
+        const electronSize = 10;
+        const nucleus = ctxPreview.createRadialGradient(x, y, 0, x, y, 58);
+        nucleus.addColorStop(0, "rgba(18, 18, 24, 1)");
+        nucleus.addColorStop(0.45, "rgba(22, 22, 28, 0.95)");
+        nucleus.addColorStop(1, "rgba(255, 215, 106, 0)");
+        ctxPreview.fillStyle = nucleus;
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, 58, 0, TAU);
+        ctxPreview.fill();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.globalCompositeOperation = "lighter";
+        for (let ring = 0; ring < 3; ring++) {
+          ctxPreview.save();
+          ctxPreview.rotate(time * (0.5 + ring * 0.2));
+          ctxPreview.strokeStyle = `rgba(255, 215, 106, ${0.28 + ring * 0.16})`;
+          ctxPreview.lineWidth = 1.1 + ring * 0.35;
+          ctxPreview.beginPath();
+          ctxPreview.ellipse(0, 0, electronOrbit * 0.68 + ring * 8, electronOrbit * 0.36 + ring * 5, ring * 0.72, 0, TAU);
+          ctxPreview.stroke();
+          ctxPreview.restore();
+        }
+        ctxPreview.restore();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.rotate(time * 0.45);
+        ctxPreview.globalCompositeOperation = "lighter";
+        ctxPreview.strokeStyle = "rgba(255, 215, 106, 0.38)";
+        ctxPreview.lineWidth = 1.4;
+        ctxPreview.beginPath();
+        for (let point = 0; point <= 8; point++) {
+          const angle = (point / 8) * TAU;
+          const inner = nucleusRadius * 0.62 + Math.sin(angle * 3 + time * 2.8) * 2.8;
+          const outer = nucleusRadius * 1.18 + Math.cos(angle * 4 + time * 3.4) * 3.6;
+          const radius = point % 2 === 0 ? outer : inner;
+          const px = Math.cos(angle) * radius;
+          const py = Math.sin(angle) * radius;
+          if (point === 0) ctxPreview.moveTo(px, py);
+          else ctxPreview.lineTo(px, py);
+        }
+        ctxPreview.closePath();
+        ctxPreview.stroke();
+        ctxPreview.restore();
+
+        ctxPreview.fillStyle = "rgba(8, 8, 12, 0.98)";
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, nucleusRadius, 0, TAU);
+        ctxPreview.fill();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.rotate(-time * 0.7);
+        ctxPreview.strokeStyle = "rgba(255, 245, 210, 0.28)";
+        ctxPreview.lineWidth = 1.1;
+        for (let ring = 0; ring < 2; ring++) {
+          const radius = nucleusRadius * (0.48 + ring * 0.22);
+          ctxPreview.beginPath();
+          for (let a = 0; a <= TAU + 0.06; a += 0.28) {
+            const wobble = Math.sin(a * (4 + ring) + time * (5.8 + ring)) * (1.3 + ring * 0.7);
+            const px = Math.cos(a) * (radius + wobble);
+            const py = Math.sin(a) * (radius * 0.92 + wobble);
+            if (a === 0) ctxPreview.moveTo(px, py);
+            else ctxPreview.lineTo(px, py);
+          }
+          ctxPreview.closePath();
+          ctxPreview.stroke();
+        }
+        ctxPreview.restore();
+
+        ctxPreview.strokeStyle = "rgba(255, 215, 106, 0.82)";
+        ctxPreview.lineWidth = 1.5;
+        ctxPreview.beginPath();
+        for (let a = 0; a <= TAU + 0.05; a += 0.2) {
+          const r = 48 + Math.sin(a * 6 + time * 4) * 5;
+          const px = x + Math.cos(a) * r * 0.42;
+          const py = y + Math.sin(a) * r * 0.42;
+          if (a === 0) ctxPreview.moveTo(px, py);
+          else ctxPreview.lineTo(px, py);
+        }
+        ctxPreview.closePath();
+        ctxPreview.stroke();
+
+        const electronX = x + Math.cos(time * 2.1) * electronOrbit;
+        const electronY = y + Math.sin(time * 2.1) * electronOrbit;
+        const electron = ctxPreview.createRadialGradient(electronX, electronY, 0, electronX, electronY, electronSize);
+        electron.addColorStop(0, "rgba(255,255,255,0.92)");
+        electron.addColorStop(0.35, "rgba(255,215,106,0.84)");
+        electron.addColorStop(1, "rgba(255,215,106,0)");
+        ctxPreview.fillStyle = electron;
+        ctxPreview.beginPath();
+        ctxPreview.arc(electronX, electronY, electronSize, 0, TAU);
+        ctxPreview.fill();
+      }
+
+      function drawMonarchPreview(ctxPreview, time) {
+        const x = 64;
+        const y = 64;
+        const pulse = 1 + Math.sin(time * 3.8) * 0.04;
+        const coreRadius = 32 * pulse;
+        const aura = ctxPreview.createRadialGradient(x, y, 0, x, y, 60);
+        aura.addColorStop(0, "rgba(72, 42, 22, 0.92)");
+        aura.addColorStop(0.35, "rgba(48, 28, 14, 0.72)");
+        aura.addColorStop(1, "rgba(20, 12, 8, 0)");
+        ctxPreview.fillStyle = aura;
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, 60, 0, TAU);
+        ctxPreview.fill();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.globalCompositeOperation = "lighter";
+        for (let shell = 0; shell < 2; shell++) {
+          ctxPreview.strokeStyle = `rgba(118, 72, 36, ${0.52 + shell * 0.14})`;
+          ctxPreview.lineWidth = 1.5 + shell * 0.5;
+          ctxPreview.beginPath();
+          for (let a = 0; a <= TAU + 0.05; a += 0.2) {
+            const r = coreRadius + shell * 8 + Math.sin(a * (7 + shell) + time * (5.5 + shell * 0.6)) * (6 + shell * 2);
+            const px = Math.cos(a) * r;
+            const py = Math.sin(a) * r;
+            if (a === 0) ctxPreview.moveTo(px, py);
+            else ctxPreview.lineTo(px, py);
+          }
+          ctxPreview.closePath();
+          ctxPreview.stroke();
+        }
+        ctxPreview.restore();
+
+        ctxPreview.fillStyle = "rgba(42, 24, 14, 0.98)";
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, coreRadius, 0, TAU);
+        ctxPreview.fill();
+
+        ctxPreview.save();
+        ctxPreview.translate(x, y);
+        ctxPreview.rotate(time * 0.24);
+        ctxPreview.globalCompositeOperation = "lighter";
+        for (let shell = 0; shell < 2; shell++) {
+          const points = 6 + shell * 2;
+          const inner = coreRadius * (0.45 + shell * 0.12);
+          const outer = coreRadius * (0.72 + shell * 0.16);
+          ctxPreview.strokeStyle = `rgba(188, 118, 70, ${0.22 + shell * 0.1})`;
+          ctxPreview.lineWidth = 1.2 + shell * 0.45;
+          ctxPreview.beginPath();
+          for (let point = 0; point <= points; point++) {
+            const angle = (point / points) * TAU;
+            const radius = point % 2 === 0 ? outer : inner;
+            const px = Math.cos(angle) * radius;
+            const py = Math.sin(angle) * radius;
+            if (point === 0) ctxPreview.moveTo(px, py);
+            else ctxPreview.lineTo(px, py);
+          }
+          ctxPreview.closePath();
+          ctxPreview.stroke();
+        }
+        ctxPreview.restore();
+
+        const triRadius = 42;
+        for (let i = 0; i < 3; i++) {
+          const angle = time * 2.75 + (i / 3) * TAU;
+          const tx = x + Math.cos(angle) * triRadius;
+          const ty = y + Math.sin(angle) * triRadius * 0.85;
+          ctxPreview.save();
+          ctxPreview.translate(tx, ty);
+          ctxPreview.rotate(angle + Math.PI / 2);
+          ctxPreview.globalCompositeOperation = "lighter";
+          ctxPreview.fillStyle = "rgba(255, 160, 70, 0.95)";
+          ctxPreview.shadowColor = "rgba(255, 160, 70, 0.7)";
+          ctxPreview.shadowBlur = 10;
+          ctxPreview.beginPath();
+          ctxPreview.moveTo(0, -10);
+          ctxPreview.lineTo(9, 8);
+          ctxPreview.lineTo(-9, 8);
+          ctxPreview.closePath();
+          ctxPreview.fill();
+          ctxPreview.strokeStyle = "rgba(255, 205, 150, 0.3)";
+          ctxPreview.lineWidth = 1;
+          ctxPreview.stroke();
+          ctxPreview.restore();
+        }
+      }
+
+      function renderBossSelectPreviews() {
+        if (state.mode !== "boss_select") return;
+        const canvases = overlay.querySelectorAll("[data-boss-preview]");
+        for (const canvasEl of canvases) {
+          const previewIndex = Number(canvasEl.dataset.bossPreview);
+          if (!Number.isFinite(previewIndex)) continue;
+          const previewCtx = canvasEl.getContext("2d");
+          if (!previewCtx) continue;
+          previewCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+          const animated = canvasEl.dataset.bossAnimated === "true";
+          const time = animated ? state.rawElapsed : 0;
+          if (previewIndex === 0) drawArchitectPreview(previewCtx, time);
+          else if (previewIndex === 1) drawSovereignPreview(previewCtx, time);
+          else if (previewIndex === 2) drawMonarchPreview(previewCtx, time);
+        }
       }
 
       function drawArchitectSigil(progress) {
@@ -5073,6 +5428,7 @@
       }
 
       function render() {
+        renderBossSelectPreviews();
         ctx.save();
         if (state.settings.screenShake && state.shake > 0) {
           ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
