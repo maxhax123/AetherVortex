@@ -3824,6 +3824,16 @@
           targetX: centerX,
           targetY: height * 0.22,
           retargetTimer: 0.35,
+          dashCooldown: 2.8 + Math.random() * 4.4,
+          dashTelegraph: 0,
+          dashRecover: 0,
+          dashActive: false,
+          dashTime: 0,
+          dashTargetX: centerX,
+          dashTargetY: height * 0.22,
+          dashVX: 0,
+          dashVY: 0,
+          dashSpeed: 0,
           cursorTimer: 0.6,
           spinnerTimer: 2,
           magnetTimer: 1.2,
@@ -4877,14 +4887,77 @@
           c.targetY = height * (0.18 + Math.random() * 0.44);
         }
         const driftStrength = c.phase === 3 ? 5.8 : c.phase === 2 ? 4.8 : 3.9;
-        c.vx += (c.targetX - c.x) * dt * driftStrength;
-        c.vy += (c.targetY - c.y) * dt * driftStrength;
-        c.vx += Math.cos(state.elapsed * (2.7 + c.phase * 0.4) + c.phase) * 12 * dt;
-        c.vy += Math.sin(state.elapsed * (3.1 + c.phase * 0.5) - c.phase) * 12 * dt;
-        c.vx *= 0.94;
-        c.vy *= 0.94;
-        c.x = clamp(c.x + c.vx * dt, 90, width - 90);
-        c.y = clamp(c.y + c.vy * dt, 80, height * 0.5);
+        if (!c.dashActive && c.dashTelegraph <= 0 && c.dashRecover <= 0) {
+          c.vx += (c.targetX - c.x) * dt * driftStrength;
+          c.vy += (c.targetY - c.y) * dt * driftStrength;
+          c.vx += Math.cos(state.elapsed * (2.7 + c.phase * 0.4) + c.phase) * 12 * dt;
+          c.vy += Math.sin(state.elapsed * (3.1 + c.phase * 0.5) - c.phase) * 12 * dt;
+          c.vx *= 0.94;
+          c.vy *= 0.94;
+          c.x = clamp(c.x + c.vx * dt, 90, width - 90);
+          c.y = clamp(c.y + c.vy * dt, 80, height * 0.5);
+        } else {
+          c.vx *= 0.9;
+          c.vy *= 0.9;
+        }
+
+        if (c.dashTelegraph > 0) {
+          c.dashTelegraph -= dt;
+          state.shake = Math.max(state.shake, 7 + c.phase * 2);
+        } else if (c.dashRecover > 0) {
+          c.dashRecover -= dt;
+        } else if (!c.dashActive) {
+          c.dashCooldown -= dt;
+          if (c.dashCooldown <= 0) {
+            c.dashTelegraph = c.phase === 3 ? 0.34 : c.phase === 2 ? 0.42 : 0.5;
+            c.dashCooldown = 0;
+            state.shake = Math.max(state.shake, 10 + c.phase * 2);
+            state.glitch = Math.max(state.glitch, 0.16 + c.phase * 0.04);
+          }
+        }
+
+        if (!c.dashActive && c.dashTelegraph <= 0 && c.dashRecover <= 0 && c.dashCooldown === 0) {
+          const dx = player.x - c.x;
+          const dy = player.y - c.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          c.dashActive = true;
+          c.dashTargetX = clamp(player.x + player.pullVx * 0.08, 70, width - 70);
+          c.dashTargetY = clamp(player.y + player.pullVy * 0.08, 70, height - 70);
+          c.dashVX = dx / dist;
+          c.dashVY = dy / dist;
+          c.dashSpeed = c.phase === 3 ? 420 : c.phase === 2 ? 360 : 320;
+          c.dashTime = c.phase === 3 ? 0.56 : c.phase === 2 ? 0.62 : 0.7;
+          state.shake = Math.max(state.shake, 18 + c.phase * 5);
+          state.glitch = Math.max(state.glitch, 0.26 + c.phase * 0.05);
+          addFlash(c.x, c.y, "rgba(255, 221, 118, 0.58)", 130 + c.phase * 18);
+        }
+
+        if (c.dashActive) {
+          const toTargetX = c.dashTargetX - c.x;
+          const toTargetY = c.dashTargetY - c.y;
+          const targetDistance = Math.hypot(toTargetX, toTargetY);
+          c.dashSpeed = Math.min(c.phase === 3 ? 1250 : 1120, c.dashSpeed + dt * (c.phase === 3 ? 2300 : 1900));
+          const stepDistance = c.dashSpeed * dt;
+          if (targetDistance <= stepDistance + 8 || c.dashTime <= 0) {
+            c.x = clamp(c.dashTargetX, 90, width - 90);
+            c.y = clamp(c.dashTargetY, 80, height * 0.6);
+            c.dashActive = false;
+            c.dashVX = 0;
+            c.dashVY = 0;
+            c.dashSpeed = 0;
+            c.dashTime = 0;
+            c.dashRecover = c.phase === 3 ? 0.32 : 0.42;
+            c.dashCooldown = (c.phase === 3 ? 1.6 : c.phase === 2 ? 2.1 : 2.7) + Math.random() * (c.phase === 3 ? 1.5 : 2.3);
+            state.shake = Math.max(state.shake, 16 + c.phase * 4);
+            addFlash(c.x, c.y, "rgba(255, 218, 104, 0.46)", 110 + c.phase * 16);
+            addSpark(c.x, c.y, "rgba(255, 239, 152, 0.94)", 10 + c.phase * 4, 170 + c.phase * 24);
+          } else {
+            c.x = clamp(c.x + c.dashVX * stepDistance, 90, width - 90);
+            c.y = clamp(c.y + c.dashVY * stepDistance, 80, height * 0.6);
+            state.shake = Math.max(state.shake, 14 + c.phase * 5);
+          }
+          c.dashTime -= dt;
+        }
 
         c.magnetTimer -= dt;
         c.magnetDuration = Math.max(0, c.magnetDuration - dt);
@@ -4966,6 +5039,9 @@
         nearest = Math.min(nearest, coreDistance);
         if (coreDistance < 130) closeCount++;
         if (coreDistance < player.hitRadius + coreRadius * 0.88) {
+          damagePlayer(1, "impact");
+        }
+        if (c.dashActive && coreDistance < player.hitRadius + coreRadius * 1.08) {
           damagePlayer(1, "impact");
         }
 
@@ -7116,6 +7192,34 @@
         ctx.beginPath();
         ctx.arc(c.x, c.y, 180 * bossScale, 0, TAU);
         ctx.fill();
+
+        if (c.dashTelegraph > 0) {
+          const telegraph = clamp(c.dashTelegraph / 0.5, 0, 1);
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.strokeStyle = `rgba(255, 248, 190, ${0.28 + telegraph * 0.42})`;
+          ctx.lineWidth = 3 + telegraph * 2;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, 92 * bossScale + (1 - telegraph) * 26, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        if (c.dashActive) {
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          const trailAngle = Math.atan2(c.dashVY, c.dashVX);
+          for (let ghost = 1; ghost <= 3; ghost++) {
+            const distanceBack = ghost * 22;
+            const ghostX = c.x - Math.cos(trailAngle) * distanceBack;
+            const ghostY = c.y - Math.sin(trailAngle) * distanceBack;
+            ctx.fillStyle = `rgba(255, 225, 120, ${0.16 - ghost * 0.03})`;
+            ctx.beginPath();
+            ctx.ellipse(ghostX, ghostY, baseWidth * (0.45 - ghost * 0.05), baseHeight * (0.38 - ghost * 0.04), c.rotation, 0, TAU);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
 
         if (c.magnetDuration > 0) {
           ctx.save();
