@@ -502,6 +502,7 @@
       justify-content: flex-start;
       width: 100%;
       max-height: 100%;
+      padding-top: 18px;
     }
 
     .menu-action-row {
@@ -552,6 +553,8 @@
     .carousel-nav,
     .config-toggle,
     .boss-launch {
+      position: relative;
+      z-index: 50;
       min-width: 280px;
       padding: 14px 18px;
       border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1973,12 +1976,6 @@
           status: "RESERVED",
           teaser: "This containment slot is reserved for a future boss encounter."
         },
-        {
-          name: "Spot Reserved",
-          active: false,
-          status: "RESERVED",
-          teaser: "This containment slot is reserved for a future boss encounter."
-        }
       ];
       const storedVolume = Number.parseFloat(localStorage.getItem("aether_vortex_volume") || "0.65");
       const storedShake = localStorage.getItem("aether_vortex_screen_shake");
@@ -2166,6 +2163,9 @@
         operationsJobs: [],
         operationsSelectedIndex: 0,
         operationsDragItem: null,
+        menuAmbientBosses: [],
+        menuAmbientSignature: "",
+        menuAmbientLastTime: 0,
         achievementToasts: [],
         impactFrames: {
           damage: 0,
@@ -7505,84 +7505,19 @@
       }
 
       function drawBossDamageIndicator() {
-        const alpha = clamp(state.bossDamageFlash / 0.16, 0, 1) * 0.5;
+        const alpha = clamp(state.bossDamageFlash / 0.16, 0, 1);
         if (alpha <= 0) return;
 
         ctx.save();
-        if (state.currentBoss === "architect") {
-          const vortex = getVortexPosition();
-          ctx.fillStyle = `rgba(255, 48, 48, ${alpha})`;
-          ctx.beginPath();
-          ctx.arc(vortex.x, vortex.y, 58, 0, TAU);
-          ctx.fill();
-        } else if (state.currentBoss === "sovereign") {
-          const s = state.sovereign;
-          const electronOrbit = s.phase === 2 ? 146 : 118;
-          const electronX = s.x + Math.cos(s.electronAngle) * electronOrbit;
-          const electronY = s.y + Math.sin(s.electronAngle) * electronOrbit;
-          ctx.fillStyle = `rgba(255, 48, 48, ${alpha})`;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.phase === 2 ? 68 : 54, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(electronX, electronY, s.phase === 2 ? 20 : 16, 0, TAU);
-          ctx.fill();
-        } else if (state.currentBoss === "monarch") {
-          const n = state.nullBoss;
-          const radius = n.phase === 2 ? 64 : 52;
-          ctx.fillStyle = `rgba(255, 48, 48, ${alpha})`;
-          ctx.beginPath();
-          for (let point = 0; point <= 5; point++) {
-            const angle = (point / 5) * TAU - Math.PI * 0.5;
-            const px = n.x + Math.cos(angle) * radius;
-            const py = n.y + Math.sin(angle) * radius;
-            if (point === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-          ctx.closePath();
-          ctx.fill();
-        } else if (state.currentBoss === "cesium") {
-          const radius = 56 * getCesiumBossScale();
-          ctx.fillStyle = `rgba(255, 64, 64, ${alpha})`;
-          ctx.beginPath();
-          for (let point = 0; point <= 8; point++) {
-            const angle = state.cesium.rotation + (point / 8) * TAU;
-            const r = point % 2 === 0 ? radius * 1.08 : radius * 0.82;
-            const px = state.cesium.x + Math.cos(angle) * r;
-            const py = state.cesium.y + Math.sin(angle) * r * 0.74;
-            if (point === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-          ctx.closePath();
-          ctx.fill();
-        } else if (state.currentBoss === "tantalum") {
-          const plates = getTantalumPlateStates();
-          ctx.fillStyle = `rgba(255, 72, 72, ${alpha})`;
-          for (const plate of plates) {
-            ctx.save();
-            ctx.translate(plate.x, plate.y);
-            ctx.rotate(plate.rotation);
-            ctx.fillRect(-plate.width * 0.5, -plate.height * 0.5, plate.width, plate.height);
-            ctx.restore();
-          }
-        } else if (state.currentBoss === "luminosity") {
-          const l = state.luminosity;
-          ctx.globalCompositeOperation = "lighter";
-          ctx.fillStyle = `rgba(255, 88, 88, ${alpha})`;
-          ctx.beginPath();
-          ctx.arc(l.x, l.y, getLuminosityCoreRadius() + 10, 0, TAU);
-          ctx.fill();
-          if (l.phase < 3) {
-            ctx.strokeStyle = `rgba(255, 122, 122, ${alpha * 0.8})`;
-            ctx.lineWidth = 10;
-            ctx.beginPath();
-            ctx.ellipse(l.x, l.y, 64, 34, l.innerAngle, 0, TAU);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.ellipse(l.x, l.y, 118, 71, l.outerAngle, 0, TAU);
-            ctx.stroke();
-          }
-        }
+        ctx.globalAlpha = 0.24 + alpha * 0.62;
+        ctx.globalCompositeOperation = "screen";
+        ctx.filter = `brightness(${1.25 + alpha * 0.95}) saturate(${1.05 + alpha * 0.4})`;
+        if (state.currentBoss === "architect") drawVortex();
+        else if (state.currentBoss === "sovereign") drawSovereignBoss();
+        else if (state.currentBoss === "monarch") drawNullBoss();
+        else if (state.currentBoss === "cesium") drawCesiumBoss();
+        else if (state.currentBoss === "tantalum") drawTantalumBoss();
+        else if (state.currentBoss === "luminosity") drawLuminosityBoss();
         ctx.restore();
       }
 
@@ -8015,73 +7950,259 @@
         else if (index === 5) drawLuminosityPreview(targetCtx, time);
       }
 
-      function getDefeatedBossIndices() {
-        return bosses
-          .map((_, index) => index)
-          .filter((index) => index !== 0 && state.profile.bossRecords[getBossRecordKey(index)]);
+      function getMenuAmbientBossIndices() {
+        return bosses.map((_, index) => index);
+      }
+
+      function syncMenuAmbientBosses() {
+        const ambientBosses = getMenuAmbientBossIndices();
+        const signature = ambientBosses.join(",");
+        if (state.menuAmbientSignature === signature && state.menuAmbientBosses.length === ambientBosses.length) {
+          return state.menuAmbientBosses;
+        }
+
+        state.menuAmbientSignature = signature;
+        state.menuAmbientBosses = ambientBosses.map((index, order) => ({
+          index,
+          seed: Math.random() * TAU,
+          pathType: Math.floor(Math.random() * 5),
+          radiusX: 70 + Math.random() * 90,
+          radiusY: 36 + Math.random() * 70,
+          speedX: 0.1 + Math.random() * 0.34,
+          speedY: 0.12 + Math.random() * 0.42,
+          bobSpeed: 0.7 + Math.random() * 1.8,
+          bobAmp: 4 + Math.random() * 12,
+          scale: 0.24 + Math.random() * 0.08,
+          rotationSpeed: (Math.random() > 0.5 ? 1 : -1) * (0.06 + Math.random() * 0.12),
+          phase: index === 1 ? (Math.random() > 0.5 ? 2 : 1) : index === 3 ? (Math.random() > 0.55 ? 2 : 1) : index === 5 ? (Math.random() > 0.65 ? 2 : 1) : 1,
+          laneOffset: (order - Math.max(0, ambientBosses.length - 1) * 0.5) * 18,
+          currentX: 0,
+          currentY: 0,
+          targetX: 0,
+          targetY: 0,
+          driftSpeed: 22
+        }));
+        return state.menuAmbientBosses;
+      }
+
+      function drawMenuAmbientBossSprite(ambient, x, y, time) {
+        const bossScaleMap = {
+          0: 0.64,
+          1: 0.48,
+          2: 0.58,
+          3: 0.52,
+          4: 0.44,
+          5: 0.5
+        };
+        const scale = (bossScaleMap[ambient.index] || 0.24) * (ambient.scale / 0.28);
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = 0.94;
+
+        if (ambient.index === 0) {
+          const visualTime = time + ambient.seed;
+          const pulse = 44 + Math.sin(visualTime * 4.8) * 10;
+          const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, pulse * 2.6);
+          gradient.addColorStop(0, "rgba(255, 255, 255, 0.1)");
+          gradient.addColorStop(0.2, "rgba(165, 76, 255, 0.34)");
+          gradient.addColorStop(0.55, "rgba(72, 20, 130, 0.18)");
+          gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(0, 0, pulse * 2.6, 0, TAU);
+          ctx.fill();
+
+          const coreRadius = 32 + pulse * 0.18;
+          const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius);
+          core.addColorStop(0, "rgba(255, 255, 255, 0.92)");
+          core.addColorStop(0.18, "rgba(255, 215, 106, 0.5)");
+          core.addColorStop(0.55, "rgba(165, 76, 255, 0.46)");
+          core.addColorStop(1, "rgba(165, 76, 255, 0)");
+          ctx.fillStyle = core;
+          ctx.beginPath();
+          ctx.arc(0, 0, coreRadius, 0, TAU);
+          ctx.fill();
+
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          for (let spoke = 0; spoke < 10; spoke++) {
+            const angle = visualTime * 0.9 + (spoke / 10) * TAU;
+            const inner = 22 + Math.sin(visualTime * 3.2 + spoke) * 6;
+            const outer = pulse * 2.1 + Math.cos(visualTime * 1.7 + spoke) * 18;
+            ctx.strokeStyle = `rgba(255, 215, 106, ${0.07 + (spoke % 2) * 0.03})`;
+            ctx.lineWidth = 1.1;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+            ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+            ctx.stroke();
+          }
+          for (let i = 0; i < 5; i++) {
+            ctx.rotate(0.23 + Math.sin(visualTime * 1.1 + i) * 0.03);
+            ctx.strokeStyle = `rgba(165, 76, 255, ${0.14 + i * 0.06})`;
+            ctx.lineWidth = 2 + i * 0.5;
+            ctx.beginPath();
+            for (let a = 0; a <= TAU + 0.02; a += 0.07) {
+              const r = pulse + Math.sin(a * (4 + i) + visualTime * (2.4 + i * 0.3)) * (8 + i * 4);
+              const px = Math.cos(a) * r;
+              const py = Math.sin(a) * r;
+              if (a === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          }
+          for (let shard = 0; shard < 12; shard++) {
+            const angle = visualTime * 1.8 + (shard / 12) * TAU;
+            const radius = pulse * (1.15 + (shard % 3) * 0.18);
+            ctx.fillStyle = `rgba(255, 215, 106, ${0.12 + (shard % 4) * 0.03})`;
+            ctx.beginPath();
+            ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 2.4 + (shard % 3), 0, TAU);
+            ctx.fill();
+          }
+          ctx.restore();
+        } else if (ambient.index === 1) {
+          const previous = state.sovereign;
+          state.sovereign = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: ambient.phase,
+            electronAngle: time * (1.5 + ambient.speedX * 2.4) + ambient.seed,
+            dashTelegraph: 0,
+            dashRecover: 0,
+            dashActive: false,
+            beams: [],
+            stars: [],
+            cursors: [],
+            fragments: [],
+            smoke: [],
+            particles: []
+          };
+          drawSovereignBoss();
+          state.sovereign = previous;
+        } else if (ambient.index === 2) {
+          const previous = state.nullBoss;
+          state.nullBoss = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: ambient.phase,
+            orbitAngle: time * (1.25 + ambient.speedX * 2.2) + ambient.seed,
+            branches: [],
+            beams: [],
+            monoliths: [],
+            reflections: [],
+            shatter: []
+          };
+          drawNullBoss();
+          state.nullBoss = previous;
+        } else if (ambient.index === 3) {
+          const previous = state.cesium;
+          state.cesium = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: ambient.phase,
+            rotation: time * (1.3 + ambient.speedX * 2.4) + ambient.seed,
+            dashTelegraph: 0,
+            dashRecover: 0,
+            dashActive: false,
+            magnetDuration: 0,
+            activePullIndices: [],
+            activeBossPull: false,
+            conePulse: time * (1.2 + ambient.speedY),
+            cursors: [],
+            spinners: [],
+            fragments: []
+          };
+          drawCesiumBoss();
+          state.cesium = previous;
+        } else if (ambient.index === 4) {
+          const previous = state.tantalum;
+          state.tantalum = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: ambient.phase,
+            rotation: time * (0.4 + ambient.speedX) + ambient.seed,
+            auraDuration: 0,
+            flashTimer: 0,
+            packets: [],
+            beams: [],
+            lightningBolts: [],
+            cursorRings: [],
+            scraps: []
+          };
+          drawTantalumBoss();
+          state.tantalum = previous;
+        } else if (ambient.index === 5) {
+          const previous = state.luminosity;
+          state.luminosity = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: ambient.phase,
+            innerAngle: time * (0.95 + ambient.speedX) + ambient.seed,
+            outerAngle: time * (2.1 + ambient.speedY) + ambient.seed * 0.7,
+            dashActive: 0,
+            flicker: Math.sin(time * (3 + ambient.speedY) + ambient.seed) * 0.08,
+            detachedElectrons: [],
+            freeElectrons: [],
+            barriers: [],
+            dots: [],
+            shards: []
+          };
+          drawLuminosityBoss();
+          state.luminosity = previous;
+        }
+
+        ctx.restore();
       }
 
       function drawMenuAmbientBosses() {
-        const defeatedBosses = getDefeatedBossIndices();
-        if (!defeatedBosses.length) return;
+        const ambientBosses = syncMenuAmbientBosses();
+        if (!ambientBosses.length) return;
 
-        const vortex = getVortexPosition();
         const time = getVisualTime();
-        const orbitRadius = Math.min(width, height) * 0.15;
-        const baseScale = clamp(0.44 - defeatedBosses.length * 0.025, 0.24, 0.4);
+        const dt = state.menuAmbientLastTime > 0 ? clamp(time - state.menuAmbientLastTime, 0, 0.05) : 1 / 60;
+        state.menuAmbientLastTime = time;
+        const marginX = 110;
+        const marginY = 110;
+        const minX = marginX;
+        const maxX = width - marginX;
+        const minY = marginY;
+        const maxY = height - marginY;
 
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        for (let i = 0; i < defeatedBosses.length; i++) {
-          const bossIndex = defeatedBosses[i];
-          const phase = (i / Math.max(1, defeatedBosses.length)) * TAU;
-          let x = vortex.x;
-          let y = vortex.y;
-          let rotation = 0;
-
-          if (bossIndex === 0) {
-            const angle = time * 0.22 + phase;
-            x += Math.cos(angle) * (orbitRadius + 14);
-            y += Math.sin(angle * 1.7) * (orbitRadius * 0.28);
-            rotation = Math.sin(time * 0.9 + i) * 0.08;
-          } else if (bossIndex === 1) {
-            const angle = time * 0.34 + phase;
-            x += Math.cos(angle) * (orbitRadius + 42);
-            y += Math.sin(angle * 0.92) * (orbitRadius * 0.52);
-            rotation = angle * 0.12;
-          } else if (bossIndex === 2) {
-            const drift = time * 0.26 + phase;
-            x += Math.sin(drift) * (orbitRadius * 0.72);
-            y += Math.sin(drift * 2.1) * (orbitRadius * 0.4);
-            rotation = Math.sin(drift * 1.5) * 0.16;
-          } else if (bossIndex === 3) {
-            const angle = time * 0.42 + phase;
-            const radius = orbitRadius * (0.7 + Math.sin(time * 1.6 + i) * 0.18);
-            x += Math.cos(angle) * (radius + 34);
-            y += Math.sin(angle) * (radius * 0.62);
-            rotation = angle * 0.2;
-          } else if (bossIndex === 4) {
-            const sweep = time * 0.18 + phase;
-            x += Math.cos(sweep) * (orbitRadius * 0.92);
-            y += Math.sin(sweep * 2.6) * (orbitRadius * 0.48);
-            rotation = Math.sin(time * 0.7 + i) * 0.1;
-          } else if (bossIndex === 5) {
-            const angle = time * 0.28 + phase;
-            x += Math.cos(angle) * (orbitRadius * 0.84);
-            y += Math.sin(angle * 1.45) * (orbitRadius * 0.66);
-            y += Math.cos(time * 2.8 + i) * 10;
-            rotation = -angle * 0.14;
+        for (const ambient of ambientBosses) {
+          const phase = ambient.seed;
+          if (ambient.currentX === 0 && ambient.currentY === 0) {
+            ambient.currentX = minX + Math.random() * Math.max(1, maxX - minX);
+            ambient.currentY = minY + Math.random() * Math.max(1, maxY - minY);
+          }
+          if (ambient.targetX === 0 && ambient.targetY === 0) {
+            ambient.targetX = minX + Math.random() * Math.max(1, maxX - minX);
+            ambient.targetY = minY + Math.random() * Math.max(1, maxY - minY);
           }
 
-          const scale = baseScale + Math.sin(time * 1.1 + i * 0.7) * 0.02;
+          const targetDistance = Math.hypot(ambient.targetX - ambient.currentX, ambient.targetY - ambient.currentY);
+          if (targetDistance < 20) {
+            ambient.targetX = minX + Math.random() * Math.max(1, maxX - minX);
+            ambient.targetY = minY + Math.random() * Math.max(1, maxY - minY);
+          }
 
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(rotation);
-          ctx.scale(scale, scale);
-          ctx.translate(-64, -64);
-          drawBossPreviewByIndex(bossIndex, ctx, time + i * 0.55);
-          ctx.restore();
+          if (targetDistance > 0.001) {
+            const travel = Math.min(targetDistance, ambient.driftSpeed * dt);
+            ambient.currentX += ((ambient.targetX - ambient.currentX) / targetDistance) * travel;
+            ambient.currentY += ((ambient.targetY - ambient.currentY) / targetDistance) * travel;
+          }
+
+          const x = ambient.currentX + Math.cos(time * (0.42 + ambient.speedX * 0.35) + phase) * 4;
+          const y = ambient.currentY + Math.sin(time * (0.5 + ambient.bobSpeed * 0.4) + phase) * (ambient.bobAmp * 0.55);
+          drawMenuAmbientBossSprite(ambient, x, y, time);
         }
         ctx.restore();
       }
@@ -9540,13 +9661,13 @@
         for (const dot of l.dots) {
           const glow = ctx.createRadialGradient(dot.x, dot.y, 0, dot.x, dot.y, 18);
           glow.addColorStop(0, "rgba(255,255,255,0.96)");
-          glow.addColorStop(0.4, "rgba(255,118,118,0.88)");
-          glow.addColorStop(1, "rgba(255,68,68,0)");
+          glow.addColorStop(0.4, "rgba(255,168,86,0.9)");
+          glow.addColorStop(1, "rgba(255,120,42,0)");
           ctx.fillStyle = glow;
           ctx.beginPath();
           ctx.arc(dot.x, dot.y, 18, 0, TAU);
           ctx.fill();
-          ctx.fillStyle = "rgba(255, 82, 82, 0.98)";
+          ctx.fillStyle = "rgba(255, 152, 62, 0.98)";
           ctx.beginPath();
           ctx.arc(dot.x, dot.y, dot.size, 0, TAU);
           ctx.fill();
@@ -9566,7 +9687,7 @@
 
         if (l.phase === 3 && l.beamActive > 0) {
           const beamSegments = getLuminosityBeamSegments();
-          ctx.strokeStyle = "rgba(255, 72, 72, 0.92)";
+          ctx.strokeStyle = "rgba(255, 140, 48, 0.94)";
           ctx.lineWidth = 18;
           ctx.beginPath();
           for (const segment of beamSegments) {
@@ -9574,7 +9695,7 @@
             ctx.lineTo(segment.x2, segment.y2);
           }
           ctx.stroke();
-          ctx.strokeStyle = "rgba(255, 218, 218, 0.52)";
+          ctx.strokeStyle = "rgba(255, 230, 188, 0.56)";
           ctx.lineWidth = 5;
           ctx.beginPath();
           for (const segment of beamSegments) {
@@ -9868,11 +9989,12 @@
           drawTantalumBoss();
         } else if (state.currentBoss === "luminosity" && ["playing", "paused", "gameover", "victory"].includes(state.mode)) {
           drawLuminosityBoss();
+        } else if (state.mode === "loading") {
+          // Keep loading visuals isolated to the overlay shell.
+        } else if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+          drawMenuAmbientBosses();
         } else {
           drawVortex();
-          if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
-            drawMenuAmbientBosses();
-          }
         }
         if (["playing", "paused", "gameover"].includes(state.mode)) {
           drawBossDamageIndicator();
