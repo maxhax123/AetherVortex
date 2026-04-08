@@ -7951,7 +7951,9 @@
       }
 
       function getMenuAmbientBossIndices() {
-        return bosses.map((_, index) => index);
+        return bosses
+          .map((_, index) => index)
+          .filter((index) => state.profile.bossRecords[getBossRecordKey(index)]);
       }
 
       function syncMenuAmbientBosses() {
