@@ -4913,7 +4913,6 @@
         let nearest = Infinity;
         let closeCount = 0;
         const phaseTwo = state.bossHealth <= state.bossMaxHealth * 0.42;
-        const bounds = getArenaBounds(phaseTwo ? 0.72 : 0.6, phaseTwo ? 72 : 60);
         if (phaseTwo && s.phase !== 2) {
           s.phase = 2;
           state.bossPhase = 2;
@@ -4921,12 +4920,12 @@
           addSpark(s.x, s.y, "rgba(255, 215, 106, 0.95)", 42, 240);
         }
 
-        const baseX = (bounds.left + bounds.right) * 0.5 + Math.cos(state.elapsed * 0.42) * (bounds.right - bounds.left) * 0.44;
-        const baseY = (bounds.top + bounds.bottom) * 0.5 + Math.sin(state.elapsed * 0.66) * (bounds.bottom - bounds.top) * 0.34;
+        const baseX = centerX + Math.cos(state.elapsed * 0.42) * width * 0.14;
+        const baseY = height * 0.26 + Math.sin(state.elapsed * 0.66) * 34;
         if (phaseTwo) {
           if (!s.dashActive && s.dashTelegraph <= 0 && s.dashRecover <= 0) {
-            s.x = clamp(s.x + (baseX - s.x) * Math.min(1, dt * 2.8), bounds.left, bounds.right);
-            s.y = clamp(s.y + (baseY - s.y) * Math.min(1, dt * 2.8), bounds.top, bounds.bottom);
+            s.x += (baseX - s.x) * Math.min(1, dt * 2.8);
+            s.y += (baseY - s.y) * Math.min(1, dt * 2.8);
           }
 
           if (s.dashTelegraph > 0) {
@@ -4949,8 +4948,8 @@
             const dy = player.y - s.y;
             const dist = Math.hypot(dx, dy) || 1;
             s.dashActive = true;
-            s.dashTargetX = clamp(player.x, bounds.left, bounds.right);
-            s.dashTargetY = clamp(player.y, bounds.top, height - 44);
+            s.dashTargetX = player.x;
+            s.dashTargetY = player.y;
             s.dashVX = dx / dist;
             s.dashVY = dy / dist;
             s.dashSpeed = 180;
@@ -4960,8 +4959,8 @@
             addFlash(s.x, s.y, "rgba(255, 215, 106, 0.62)", 160);
           }
         } else {
-          s.x = clamp(baseX, bounds.left, bounds.right);
-          s.y = clamp(baseY, bounds.top, bounds.bottom);
+          s.x = baseX;
+          s.y = baseY;
           s.dashTelegraph = 0;
           s.dashRecover = 0;
           s.dashActive = false;
@@ -4980,8 +4979,8 @@
           s.dashSpeed = Math.min(1450, s.dashSpeed + dt * 2600);
           const stepDistance = s.dashSpeed * dt;
           if (targetDistance <= stepDistance + 6 || s.dashTime <= 0) {
-            s.x = clamp(s.dashTargetX, bounds.left, bounds.right);
-            s.y = clamp(s.dashTargetY, bounds.top, height - 44);
+            s.x = s.dashTargetX;
+            s.y = s.dashTargetY;
             s.dashActive = false;
             s.dashVX = 0;
             s.dashVY = 0;
@@ -4992,8 +4991,8 @@
             state.shake = Math.max(state.shake, 18);
             addFlash(s.x, s.y, "rgba(255, 215, 106, 0.55)", 130);
           } else {
-            s.x = clamp(s.x + s.dashVX * stepDistance, bounds.left, bounds.right);
-            s.y = clamp(s.y + s.dashVY * stepDistance, bounds.top, height - 44);
+            s.x += s.dashVX * stepDistance;
+            s.y += s.dashVY * stepDistance;
             state.shake = Math.max(state.shake, 26);
           }
           s.dashTime -= dt;
@@ -5227,7 +5226,6 @@
         let nearest = Infinity;
         let closeCount = 0;
         const phaseTwo = state.bossHealth <= state.bossMaxHealth * 0.35;
-        const bounds = getArenaBounds(phaseTwo ? 0.7 : 0.58, phaseTwo ? 94 : 78);
         if (phaseTwo && n.phase !== 2) {
           n.phase = 2;
           state.bossPhase = 2;
@@ -5235,14 +5233,14 @@
           addSpark(n.x, n.y, "rgba(165, 110, 64, 0.95)", 44, 240);
         }
 
-        const driftX = (bounds.left + bounds.right) * 0.5 + Math.cos(state.elapsed * 0.33) * (bounds.right - bounds.left) * 0.4;
-        const driftY = (bounds.top + bounds.bottom) * 0.46 + Math.sin(state.elapsed * 0.41) * (bounds.bottom - bounds.top) * 0.24;
+        const driftX = centerX + Math.cos(state.elapsed * 0.33) * width * 0.11;
+        const driftY = height * 0.22 + Math.sin(state.elapsed * 0.41) * 28;
         const chaseWeight = phaseTwo ? 0.68 : 0.4;
         const targetX = driftX + (player.x - driftX) * chaseWeight;
         const targetY = driftY + (player.y - driftY) * (phaseTwo ? 0.72 : 0.44);
         const followRate = phaseTwo ? 3.2 : 1.92;
-        n.x = clamp(n.x + (targetX - n.x) * dt * followRate, bounds.left, bounds.right);
-        n.y = clamp(n.y + (targetY - n.y) * dt * followRate, bounds.top, bounds.bottom);
+        n.x += (targetX - n.x) * dt * followRate;
+        n.y += (targetY - n.y) * dt * followRate;
 
         n.orbitAngle += dt * (phaseTwo ? 3.55 : 2.75);
         const triangleRadius = phaseTwo ? 118 : 96;
@@ -5524,15 +5522,18 @@
         }
         const coreRadius = 48 * getCesiumBossScale();
         const territorialRadius = c.phase === 3 ? 260 : c.phase === 2 ? 235 : 210;
-        const bounds = getArenaBounds(c.phase === 3 ? 0.72 : 0.64, 96);
+        const minX = 88;
+        const maxX = width - 88;
+        const minY = 78;
+        const freeY = Math.min(height - 96, c.phase === 3 ? height * 0.68 : c.phase === 2 ? height * 0.6 : height * 0.52);
 
         c.rotation += dt * (2.3 + c.phase * 0.85);
         c.conePulse += dt * (2.2 + c.phase * 0.5);
         c.retargetTimer -= dt;
         if (c.retargetTimer <= 0) {
           c.retargetTimer = 0.55 + Math.random() * (c.phase === 3 ? 0.45 : 0.8);
-          c.targetX = bounds.left + Math.random() * (bounds.right - bounds.left);
-          c.targetY = bounds.top + Math.random() * (bounds.bottom - bounds.top);
+          c.targetX = 96 + Math.random() * Math.max(40, width - 192);
+          c.targetY = minY + Math.random() * Math.max(36, freeY - minY);
         }
         const driftStrength = c.phase === 3 ? 5.8 : c.phase === 2 ? 4.8 : 3.9;
         if (!c.dashActive && c.dashTelegraph <= 0 && c.dashRecover <= 0) {
@@ -5542,8 +5543,8 @@
           c.vy += Math.sin(state.elapsed * (3.1 + c.phase * 0.5) - c.phase) * 12 * dt;
           c.vx *= 0.94;
           c.vy *= 0.94;
-          c.x = clamp(c.x + c.vx * dt, bounds.left, bounds.right);
-          c.y = clamp(c.y + c.vy * dt, bounds.top, bounds.bottom);
+          c.x = clamp(c.x + c.vx * dt, minX, maxX);
+          c.y = clamp(c.y + c.vy * dt, minY, freeY);
         } else {
           c.vx *= 0.9;
           c.vy *= 0.9;
@@ -5573,8 +5574,8 @@
           const dy = player.y - c.y;
           const dist = Math.hypot(dx, dy) || 1;
           c.dashActive = true;
-          c.dashTargetX = clamp(player.x + player.pullVx * 0.08, bounds.left, bounds.right);
-          c.dashTargetY = clamp(player.y + player.pullVy * 0.08, bounds.top, height - 44);
+          c.dashTargetX = clamp(player.x + player.pullVx * 0.08, minX, maxX);
+          c.dashTargetY = clamp(player.y + player.pullVy * 0.08, minY, height - 54);
           c.dashVX = dx / dist;
           c.dashVY = dy / dist;
           c.dashSpeed = c.phase === 3 ? 420 : c.phase === 2 ? 360 : 320;
@@ -5591,8 +5592,8 @@
           c.dashSpeed = Math.min(c.phase === 3 ? 1250 : 1120, c.dashSpeed + dt * (c.phase === 3 ? 2300 : 1900));
           const stepDistance = c.dashSpeed * dt;
           if (targetDistance <= stepDistance + 8 || c.dashTime <= 0) {
-            c.x = clamp(c.dashTargetX, bounds.left, bounds.right);
-            c.y = clamp(c.dashTargetY, bounds.top, height - 44);
+            c.x = clamp(c.dashTargetX, minX, maxX);
+            c.y = clamp(c.dashTargetY, minY, height - 54);
             c.dashActive = false;
             c.dashVX = 0;
             c.dashVY = 0;
@@ -5604,8 +5605,8 @@
             addFlash(c.x, c.y, "rgba(255, 218, 104, 0.46)", 110 + c.phase * 16);
             addSpark(c.x, c.y, "rgba(255, 239, 152, 0.94)", 10 + c.phase * 4, 170 + c.phase * 24);
           } else {
-            c.x = clamp(c.x + c.dashVX * stepDistance, bounds.left, bounds.right);
-            c.y = clamp(c.y + c.dashVY * stepDistance, bounds.top, height - 44);
+            c.x = clamp(c.x + c.dashVX * stepDistance, minX, maxX);
+            c.y = clamp(c.y + c.dashVY * stepDistance, minY, height - 54);
             state.shake = Math.max(state.shake, 14 + c.phase * 5);
           }
           c.dashTime -= dt;
@@ -5951,23 +5952,26 @@
           addFlash(t.x, t.y, "rgba(140, 240, 255, 0.7)", 160 + nextPhase * 24);
           addSpark(t.x, t.y, "rgba(150, 246, 255, 0.96)", 24 + nextPhase * 8, 200 + nextPhase * 24);
         }
-        const bounds = getArenaBounds(t.phase === 3 ? 0.66 : 0.54, 122);
+        const minX = 118;
+        const maxX = width - 118;
+        const minY = 96;
+        const maxY = Math.min(height - 132, t.phase === 3 ? height * 0.58 : t.phase === 2 ? height * 0.5 : height * 0.42);
 
         t.staticPhase += dt * (2 + t.phase * 0.3);
         t.rotation = Math.sin(state.elapsed * (t.phase === 3 ? 0.58 : t.phase === 2 ? 0.4 : 0.28)) * (t.phase === 3 ? 0.26 : t.phase === 2 ? 0.17 : 0.1);
         t.retargetTimer -= dt;
         if (t.retargetTimer <= 0) {
           t.retargetTimer = t.phase === 3 ? 1.25 + Math.random() * 0.7 : 1.6 + Math.random() * 1.2;
-          t.targetX = bounds.left + Math.random() * (bounds.right - bounds.left);
-          t.targetY = bounds.top + Math.random() * (bounds.bottom - bounds.top);
+          t.targetX = 124 + Math.random() * Math.max(40, width - 248);
+          t.targetY = minY + Math.random() * Math.max(30, maxY - minY);
         }
         const pull = t.phase === 3 ? 3.2 : t.phase === 2 ? 2.5 : 2;
         t.vx += (t.targetX - t.x) * dt * pull;
         t.vy += (t.targetY - t.y) * dt * pull;
         t.vx *= 0.93;
         t.vy *= 0.93;
-        t.x = clamp(t.x + t.vx * dt, bounds.left, bounds.right);
-        t.y = clamp(t.y + t.vy * dt, bounds.top, bounds.bottom);
+        t.x = clamp(t.x + t.vx * dt, minX, maxX);
+        t.y = clamp(t.y + t.vy * dt, minY, maxY);
 
         if (t.phase === 3) {
           t.auraDuration = 1;
@@ -6324,11 +6328,14 @@
           x: fromLeft ? -70 : width + 70,
           y,
           vx: fromLeft ? 180 : -180,
-          vy: 0,
+          vy: (Math.random() - 0.5) * 28,
           width: 94,
           height: 58,
           side,
-          life: 8
+          life: 8,
+          bounces: 4,
+          spin: (Math.random() - 0.5) * 0.8,
+          angle: 0
         });
       }
 
@@ -6425,11 +6432,13 @@
             addSpark(l.x, l.y, "rgba(255, 236, 236, 0.98)", 26, 220);
           }
         }
-        const roamBounds = getArenaBounds(l.phase === 3 ? 0.74 : 0.6, 104);
-
-        const homeX = (roamBounds.left + roamBounds.right) * 0.5 + Math.sin(state.elapsed * 0.62) * (roamBounds.right - roamBounds.left) * 0.34;
-        const homeY = (roamBounds.top + roamBounds.bottom) * 0.46 + Math.cos(state.elapsed * 0.34) * (roamBounds.bottom - roamBounds.top) * 0.08;
+        const homeX = centerX + Math.sin(state.elapsed * 0.62) * 124;
+        const homeY = height * 0.28 + Math.cos(state.elapsed * 0.34) * 8;
         const chargeHalfWidth = 128;
+        const minX = 96;
+        const maxX = width - 96;
+        const minY = 86;
+        const roamMaxY = Math.min(height - 112, l.phase === 3 ? height * 0.62 : l.phase === 2 ? height * 0.48 : height * 0.42);
         l.dashCooldown = Math.max(0, l.dashCooldown - dt);
         if (l.phase <= 2) {
           l.dashCheckTimer -= dt;
@@ -6438,7 +6447,7 @@
             const playerInChargeLane = Math.abs(player.x - l.x) <= chargeHalfWidth && player.y >= l.y;
             const shouldCharge = l.phase === 2 ? Math.random() < 0.78 : Math.random() < 0.6;
             if (!l.dashActive && l.dashCooldown <= 0 && playerInChargeLane && shouldCharge) {
-              const targetX = clamp(player.x, roamBounds.left, roamBounds.right);
+              const targetX = clamp(player.x, minX, maxX);
               const targetY = height - 34;
               const dx = targetX - l.x;
               const dy = targetY - l.y;
@@ -6474,22 +6483,22 @@
             l.wanderTimer -= dt;
             if (l.wanderTimer <= 0) {
               l.wanderTimer = 0.8 + Math.random() * 1.45;
-              l.wanderTargetX = roamBounds.left + Math.random() * (roamBounds.right - roamBounds.left);
-              l.wanderTargetY = roamBounds.top + Math.random() * (roamBounds.bottom - roamBounds.top);
+              l.wanderTargetX = 118 + Math.random() * Math.max(40, width - 236);
+              l.wanderTargetY = 96 + Math.random() * Math.max(32, Math.min(height - 120, height * 0.62) - 96);
             }
             moveTargetX = l.wanderTargetX;
             moveTargetY = l.wanderTargetY;
           }
-          l.vx += (moveTargetX - l.x) * dt * (l.phase === 3 ? 2.5 : 3.1);
-          l.vy += (moveTargetY - l.y) * dt * (l.phase === 3 ? 2.35 : 2.7);
-          l.vx *= Math.max(0, 1 - dt * 3.6);
-          l.vy *= Math.max(0, 1 - dt * 3.8);
-          l.x += l.vx * dt;
-          l.y += l.vy * dt;
+          const easeX = Math.min(1, dt * (l.phase === 3 ? 2.4 : 3.05));
+          const easeY = Math.min(1, dt * (l.phase === 3 ? 2.15 : 2.7));
+          l.vx *= Math.max(0, 1 - dt * 5.2);
+          l.vy *= Math.max(0, 1 - dt * 5.4);
+          l.x += (moveTargetX - l.x) * easeX + l.vx * dt * 0.22;
+          l.y += (moveTargetY - l.y) * easeY + l.vy * dt * 0.22;
         }
-        l.x = clamp(l.x, roamBounds.left, roamBounds.right);
-        const maxY = l.phase === 3 ? roamBounds.bottom : l.dashActive > 0 ? height - 30 : roamBounds.bottom;
-        l.y = clamp(l.y, roamBounds.top, maxY);
+        l.x = clamp(l.x, minX, maxX);
+        const maxY = l.phase === 3 ? roamMaxY : l.dashActive > 0 ? height - 30 : roamMaxY;
+        l.y = clamp(l.y, minY, maxY);
         l.innerAngle += dt * 0.85;
         l.outerAngle += dt * (l.phase >= 2 ? 3.8 : 1.2);
         l.flashBlindTimer = Math.max(0, l.flashBlindTimer - dt);
@@ -6642,14 +6651,42 @@
           const barrier = l.barriers[i];
           barrier.x += barrier.vx * dt;
           barrier.y += barrier.vy * dt;
+          barrier.angle += barrier.spin * dt;
           barrier.life -= dt;
+          const halfW = barrier.width * 0.5;
+          const halfH = barrier.height * 0.5;
+          let bounced = false;
+          if (barrier.x <= halfW) {
+            barrier.x = halfW;
+            barrier.vx = Math.abs(barrier.vx);
+            bounced = true;
+          } else if (barrier.x >= width - halfW) {
+            barrier.x = width - halfW;
+            barrier.vx = -Math.abs(barrier.vx);
+            bounced = true;
+          }
+          if (barrier.y <= halfH) {
+            barrier.y = halfH;
+            barrier.vy = Math.abs(barrier.vy || 26);
+            bounced = true;
+          } else if (barrier.y >= height - halfH) {
+            barrier.y = height - halfH;
+            barrier.vy = -Math.abs(barrier.vy || 26);
+            bounced = true;
+          }
+          if (bounced) {
+            barrier.bounces -= 1;
+            barrier.spin = -barrier.spin * 0.92;
+            addSpark(barrier.x, barrier.y, "rgba(255, 112, 112, 0.92)", 8, 120);
+            addFlash(barrier.x, barrier.y, "rgba(255, 92, 92, 0.22)", 42);
+          }
           const dist = Math.hypot(player.x - barrier.x, player.y - barrier.y);
           nearest = Math.min(nearest, dist);
           if (dist < 150) closeCount++;
           if (Math.abs(player.x - barrier.x) < barrier.width * 0.5 + player.hitRadius && Math.abs(player.y - barrier.y) < barrier.height * 0.5 + player.hitRadius) {
             damagePlayer(1, "impact");
           }
-          if (barrier.life <= 0 || barrier.x < -140 || barrier.x > width + 140) l.barriers.splice(i, 1);
+          if (barrier.life <= 0 || barrier.bounces < 0) l.barriers.splice(i, 1);
         }
 
         if (l.phase === 3 && l.beamActive > 0) {
@@ -6717,18 +6754,6 @@
         }
       }
 
-      function getArenaBounds(bottomRatio = 0.6, radius = 90) {
-        const leftInset = Math.min(width * 0.18, Math.max(58, radius + 22));
-        const topInset = Math.min(height * 0.18, Math.max(54, radius + 14));
-        const bottomInset = Math.min(height - Math.max(56, radius + 20), height * bottomRatio);
-        return {
-          left: leftInset,
-          right: Math.max(leftInset + 80, width - leftInset),
-          top: topInset,
-          bottom: Math.max(topInset + 90, bottomInset)
-        };
-      }
-
       function triggerImpactFrame(kind, strength = 1) {
         const clampedStrength = clamp(strength, 0, 1.35);
         if (kind === "damage") {
@@ -6748,10 +6773,9 @@
 
       function getVortexPosition() {
         const visualTime = getVisualTime();
-        const bounds = getArenaBounds(0.76, 76);
         return {
-          x: (bounds.left + bounds.right) * 0.5 + Math.cos(visualTime * 0.54) * (bounds.right - bounds.left) * 0.42,
-          y: (bounds.top + bounds.bottom) * 0.5 + Math.sin(visualTime * 0.82) * (bounds.bottom - bounds.top) * 0.38
+          x: centerX + Math.cos(visualTime * 0.54) * width * 0.08,
+          y: centerY + Math.sin(visualTime * 0.82) * height * 0.08
         };
       }
 
@@ -10088,35 +10112,84 @@
         }
 
         for (const barrier of l.barriers) {
-          ctx.fillStyle = "rgba(58, 16, 22, 0.94)";
-          ctx.fillRect(barrier.x - barrier.width * 0.5, barrier.y - barrier.height * 0.5, barrier.width, barrier.height);
-          ctx.strokeStyle = "rgba(255, 92, 92, 0.78)";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(barrier.x - barrier.width * 0.5, barrier.y - barrier.height * 0.5, barrier.width, barrier.height);
-          ctx.fillStyle = "rgba(255, 84, 84, 0.14)";
-          ctx.fillRect(barrier.x - barrier.width * 0.5 + 8, barrier.y - barrier.height * 0.5 + 8, barrier.width - 16, 10);
-          ctx.fillStyle = "rgba(255, 230, 230, 0.18)";
-          ctx.fillRect(barrier.x - barrier.width * 0.5 + 12, barrier.y - barrier.height * 0.5 + 14, barrier.width * 0.42, 4);
+          ctx.save();
+          ctx.translate(barrier.x, barrier.y);
+          ctx.rotate(barrier.angle || 0);
+          const shell = ctx.createLinearGradient(-barrier.width * 0.5, -barrier.height * 0.5, barrier.width * 0.5, barrier.height * 0.5);
+          shell.addColorStop(0, "rgba(82, 18, 24, 0.98)");
+          shell.addColorStop(0.5, "rgba(152, 28, 40, 0.96)");
+          shell.addColorStop(1, "rgba(78, 10, 18, 0.98)");
+          ctx.fillStyle = shell;
+          ctx.fillRect(-barrier.width * 0.5, -barrier.height * 0.5, barrier.width, barrier.height);
+          ctx.strokeStyle = "rgba(255, 104, 104, 0.82)";
+          ctx.lineWidth = 2.2;
+          ctx.strokeRect(-barrier.width * 0.5, -barrier.height * 0.5, barrier.width, barrier.height);
+          ctx.fillStyle = "rgba(255, 84, 84, 0.18)";
+          ctx.fillRect(-barrier.width * 0.5 + 8, -barrier.height * 0.5 + 8, barrier.width - 16, 10);
+          ctx.fillStyle = "rgba(255, 230, 230, 0.22)";
+          ctx.fillRect(-barrier.width * 0.5 + 12, -barrier.height * 0.5 + 14, barrier.width * 0.42, 4);
+          ctx.strokeStyle = "rgba(255, 186, 186, 0.22)";
+          ctx.lineWidth = 5;
+          ctx.strokeRect(-barrier.width * 0.44, -barrier.height * 0.34, barrier.width * 0.88, barrier.height * 0.68);
+          ctx.restore();
         }
 
         if (l.phase === 3 && l.beamActive > 0) {
           const beamSegments = getLuminosityBeamSegments();
-          ctx.strokeStyle = "rgba(255, 140, 48, 0.94)";
-          ctx.lineWidth = 18;
-          ctx.beginPath();
+          const beamPulse = 0.76 + Math.sin(state.elapsed * 18 + l.beamSweep * 4) * 0.14;
+          ctx.save();
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
           for (const segment of beamSegments) {
+            const beamGlow = ctx.createLinearGradient(segment.x1, segment.y1, segment.x2, segment.y2);
+            beamGlow.addColorStop(0, "rgba(255, 64, 38, 0)");
+            beamGlow.addColorStop(0.18, `rgba(255, 82, 40, ${0.26 * beamPulse})`);
+            beamGlow.addColorStop(0.5, `rgba(255, 118, 42, ${0.46 * beamPulse})`);
+            beamGlow.addColorStop(0.82, `rgba(255, 86, 34, ${0.28 * beamPulse})`);
+            beamGlow.addColorStop(1, "rgba(255, 64, 38, 0)");
+            ctx.strokeStyle = beamGlow;
+            ctx.lineWidth = 28;
+            ctx.beginPath();
             ctx.moveTo(segment.x1, segment.y1);
             ctx.lineTo(segment.x2, segment.y2);
-          }
-          ctx.stroke();
-          ctx.strokeStyle = "rgba(255, 230, 188, 0.56)";
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          for (const segment of beamSegments) {
+            ctx.stroke();
+
+            ctx.strokeStyle = `rgba(255, 132, 34, ${0.88 * beamPulse})`;
+            ctx.lineWidth = 14;
+            ctx.beginPath();
             ctx.moveTo(segment.x1, segment.y1);
             ctx.lineTo(segment.x2, segment.y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = `rgba(255, 246, 214, ${0.92 * beamPulse})`;
+            ctx.lineWidth = 4.5;
+            ctx.beginPath();
+            ctx.moveTo(segment.x1, segment.y1);
+            ctx.lineTo(segment.x2, segment.y2);
+            ctx.stroke();
+
+            const segmentAngle = Math.atan2(segment.y2 - segment.y1, segment.x2 - segment.x1);
+            const segmentLength = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
+            const arcCount = Math.max(2, Math.floor(segmentLength / 160));
+            ctx.strokeStyle = `rgba(255, 208, 122, ${0.36 * beamPulse})`;
+            ctx.lineWidth = 2.2;
+            for (let arc = 0; arc < arcCount; arc++) {
+              const startRatio = arc / arcCount;
+              const endRatio = (arc + 0.72) / arcCount;
+              const sx = segment.x1 + Math.cos(segmentAngle) * segmentLength * startRatio;
+              const sy = segment.y1 + Math.sin(segmentAngle) * segmentLength * startRatio;
+              const ex = segment.x1 + Math.cos(segmentAngle) * segmentLength * Math.min(1, endRatio);
+              const ey = segment.y1 + Math.sin(segmentAngle) * segmentLength * Math.min(1, endRatio);
+              const arcOffset = 10 + Math.sin(state.elapsed * 20 + arc) * 6;
+              const mx = (sx + ex) * 0.5 + Math.cos(segmentAngle + Math.PI * 0.5) * arcOffset;
+              const my = (sy + ey) * 0.5 + Math.sin(segmentAngle + Math.PI * 0.5) * arcOffset;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.quadraticCurveTo(mx, my, ex, ey);
+              ctx.stroke();
+            }
           }
-          ctx.stroke();
+          ctx.restore();
         }
         ctx.restore();
       }
