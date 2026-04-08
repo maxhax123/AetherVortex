@@ -141,6 +141,15 @@
       text-shadow: 0 0 12px rgba(255, 215, 106, 0.35);
     }
 
+    .subvalue {
+      margin-top: 6px;
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      color: var(--violet-hot);
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(165, 76, 255, 0.24);
+    }
+
     .meter {
       margin-top: 8px;
       height: 10px;
@@ -1257,75 +1266,6 @@
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    .tutorial-demo {
-      margin: 16px 0 6px;
-      display: grid;
-      gap: 12px;
-      text-align: left;
-    }
-
-    .tutorial-demo-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-    }
-
-    .tutorial-demo-card {
-      padding: 14px 16px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background:
-        radial-gradient(circle at top, rgba(255, 215, 106, 0.08), transparent 58%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-      box-shadow:
-        inset 0 0 24px rgba(255, 255, 255, 0.02),
-        0 0 26px rgba(255, 215, 106, 0.06);
-      display: grid;
-      gap: 10px;
-    }
-
-    .tutorial-demo-card strong {
-      font-size: 12px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--gold-hot);
-    }
-
-    .tutorial-demo-copy {
-      color: var(--ui-dim);
-      font-size: 12px;
-      line-height: 1.55;
-      letter-spacing: 0.06em;
-    }
-
-    .tutorial-key-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .tutorial-key {
-      min-width: 34px;
-      padding: 8px 10px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-      box-shadow:
-        inset 0 -2px 0 rgba(0, 0, 0, 0.22),
-        0 0 16px rgba(255, 215, 106, 0.08);
-      color: var(--ui);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-align: center;
-      text-transform: uppercase;
-    }
-
-    .tutorial-arrow {
-      color: var(--gold-hot);
-      letter-spacing: 0.18em;
-      font-size: 12px;
-    }
-
     .slider-wrap {
       margin-top: 18px;
       display: grid;
@@ -2163,8 +2103,9 @@
     <div class="panel">
       <div class="title">Sector V: Chrono-Drift</div>
       <div class="value" id="scoreValue">000000</div>
+      <div class="subvalue" id="bossTimerValue">Time 00:00.000</div>
       <div id="controlHint" style="margin-top: 8px; color: var(--ui-dim); font-size: 12px; letter-spacing: 0.12em;">
-        MOUSE MOVE / W-S THRUST / A-D TURN / SHIFT FOCUS / Q SLOW / E FAST / ESC PAUSE / LEFT CLICK ULTIMATE
+        MOUSE MOVE / W-S THRUST / A-D TURN / SHIFT FOCUS / Q SLOW / E FAST / ESC PAUSE / LEFT CLICK XL / RIGHT CLICK ULTIMATE
       </div>
       <button class="pause-toggle inline" id="pauseButton" aria-label="Pause or continue">
         <span class="pause-toggle-bar"></span>
@@ -2189,6 +2130,9 @@
       <div class="title" style="margin-top: 14px;">The Kinetic Well</div>
       <div id="ultimateValue" style="font-size: 18px; color: var(--gold-hot);">Graphic Reset · 0%</div>
       <div class="ultimate-meter"><div class="ultimate-meter-fill" id="ultimateFill"></div></div>
+      <div class="title" style="margin-top: 14px;">XL Bullet Move</div>
+      <div id="xlValue" style="font-size: 18px; color: var(--gold-hot);">Twin Hunter · 0 Ready</div>
+      <div class="ultimate-meter"><div class="ultimate-meter-fill" id="xlFill"></div></div>
     </div>
   </div>
 
@@ -2232,6 +2176,7 @@
       const mobileStick = document.getElementById("mobileStick");
       const achievementFeed = document.getElementById("achievementFeed");
       const scoreValue = document.getElementById("scoreValue");
+      const bossTimerValue = document.getElementById("bossTimerValue");
       const chronoValue = document.getElementById("chronoValue");
       const chronoFill = document.getElementById("chronoFill");
       const bossValue = document.getElementById("bossValue");
@@ -2244,9 +2189,19 @@
       const riskFill = document.getElementById("riskFill");
       const ultimateValue = document.getElementById("ultimateValue");
       const ultimateFill = document.getElementById("ultimateFill");
+      const xlValue = document.getElementById("xlValue");
+      const xlFill = document.getElementById("xlFill");
 
       const TAU = Math.PI * 2;
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const formatRunTimer = (seconds) => {
+        const totalMs = Math.max(0, Math.floor(seconds * 1000));
+        const minutes = Math.floor(totalMs / 60000);
+        const secs = Math.floor((totalMs % 60000) / 1000);
+        const millis = totalMs % 1000;
+        return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
+      };
       const hexToRgba = (hex, alpha) => {
         const value = hex.replace("#", "");
         const full = value.length === 3 ? value.split("").map((char) => char + char).join("") : value;
@@ -2320,10 +2275,10 @@
           teaser: "A noble neon atom burning hot at the center. Expect blinding red pulses, roaming electrons, drifting pop-up barriers, and a lethal high-voltage sweep."
         },
         {
-          name: "Spot Reserved",
-          active: false,
-          status: "RESERVED",
-          teaser: "This containment slot is reserved for a future boss encounter."
+          name: "The Sili Overclock",
+          active: true,
+          status: "ACTIVE",
+          teaser: "Twin binary cores bound by a jagged electrical tether. Expect orbit swaps, data beams, push-pull polarity, and an overclocked final collapse."
         },
         {
           name: "Spot Reserved",
@@ -2420,6 +2375,60 @@
           priceCents: 9999
         }
       };
+      const xlBulletDefs = {
+        twin_hunter: {
+          name: "Twin Hunter",
+          desc: "Launch two tracking missiles. Each one deals 2.0% of boss max health on impact and self-detonates after 4 seconds.",
+          priceCents: 0,
+          missileCount: 2,
+          damagePercent: 0.02,
+          speed: 430,
+          turnRate: 5.8,
+          life: 4,
+          spread: 20,
+          color: "rgba(255, 220, 138, 0.95)",
+          accent: "rgba(255, 245, 215, 0.98)"
+        },
+        split_comet: {
+          name: "Split Comet",
+          desc: "Fire three quick interceptor darts with lighter payloads for a wider catch radius around mobile bosses.",
+          priceCents: 0,
+          missileCount: 3,
+          damagePercent: 0.011,
+          speed: 470,
+          turnRate: 6.4,
+          life: 4.1,
+          spread: 28,
+          color: "rgba(126, 255, 198, 0.94)",
+          accent: "rgba(226, 255, 240, 0.98)"
+        },
+        vault_lance: {
+          name: "Vault Lance",
+          desc: "Two reinforced seeker lances with stronger warheads and tighter pursuit curves.",
+          priceCents: 2499,
+          missileCount: 2,
+          damagePercent: 0.018,
+          speed: 450,
+          turnRate: 6.2,
+          life: 4.2,
+          spread: 18,
+          color: "rgba(110, 243, 255, 0.95)",
+          accent: "rgba(223, 251, 255, 0.98)"
+        },
+        ember_swarm: {
+          name: "Ember Swarm",
+          desc: "Release four compact pursuit rockets. Each hit is lighter, but the pattern is good for catching erratic bosses.",
+          priceCents: 3899,
+          missileCount: 4,
+          damagePercent: 0.0095,
+          speed: 440,
+          turnRate: 6.8,
+          life: 4.15,
+          spread: 34,
+          color: "rgba(255, 155, 94, 0.95)",
+          accent: "rgba(255, 230, 204, 0.98)"
+        }
+      };
       const achievementDefs = {
         architect_down: { title: "Architect Down", desc: "Defeat the Architect of the Void." },
         sovereign_down: { title: "Sovereign Split", desc: "Defeat the Protium Sovereign." },
@@ -2427,6 +2436,7 @@
         cesium_down: { title: "Cesium Cracked", desc: "Defeat Cesium Jim-Dandy Superficial." },
         tantalum_down: { title: "Capacitor Collapsed", desc: "Defeat Tantalum the Capacitor Sovereign." },
         luminosity_down: { title: "Neon Extinguished", desc: "Defeat Lord Luminosity the Noble Neon." },
+        sili_down: { title: "Overclock Crashed", desc: "Defeat The Sili Overclock." },
         arsenal_tuned: { title: "Arsenal Tuned", desc: "Purchase your first shop upgrade." },
         score_2500: { title: "Signal Ascendant", desc: "Reach a score of 2500." },
         score_5000: { title: "Signal Unbroken", desc: "Reach a score of 5000." },
@@ -2540,34 +2550,6 @@
         return binding ? input.keys.has(binding) : false;
       }
 
-      function createDefaultTutorialState() {
-        return {
-          active: false,
-          step: 0,
-          promptTitle: "",
-          promptBody: [],
-          promptButton: "Continue",
-          promptResumeStep: null,
-          sawMouseAim: false,
-          heldFocus: false,
-          usedSlow: false,
-          usedFast: false,
-          openedPauseMenu: false,
-          boughtPauseUpgrade: false,
-          usedUltimate: false,
-          movement: {
-            forward: false,
-            reverse: false,
-            left: false,
-            right: false
-          }
-        };
-      }
-
-      function isTutorialRequired() {
-        return !state.profile?.tutorialCompleted;
-      }
-
       function getHudControlHint() {
         return [
           "MOUSE MOVE",
@@ -2577,7 +2559,8 @@
           `${formatControlCode(getControlBinding("slow"))} SLOW`,
           `${formatControlCode(getControlBinding("fast"))} FAST`,
           `${formatControlCode(getControlBinding("pause"))} PAUSE`,
-          "LEFT CLICK ULTIMATE"
+          "LEFT CLICK XL",
+          "RIGHT CLICK ULTIMATE"
         ].join(" / ");
       }
 
@@ -2589,11 +2572,6 @@
       function createDefaultProfile(source = {}) {
         const achievements = { ...(source.achievements || {}) };
         delete achievements.full_bloom;
-        const hasExistingProgress =
-          (Number.isFinite(source.bestScore) && source.bestScore > 0) ||
-          Object.keys(achievements).length > 0 ||
-          Object.values(source.bossRecords || {}).some(Boolean) ||
-          (Number.isFinite(source.operations?.cents) && source.operations.cents !== 0);
         const shop = {
           ownedUltimates: {
             graphic_reset: true,
@@ -2602,6 +2580,15 @@
             macro_burst: Boolean(source.shop?.ownedUltimates?.macro_burst),
             root_override: Boolean(source.shop?.ownedUltimates?.root_override)
           },
+          ownedXlBullets: {
+            twin_hunter: true,
+            split_comet: true,
+            vault_lance: Boolean(source.shop?.ownedXlBullets?.vault_lance),
+            ember_swarm: Boolean(source.shop?.ownedXlBullets?.ember_swarm)
+          },
+          selectedXlBullet: (source.shop?.ownedXlBullets?.[source.shop?.selectedXlBullet] || ["twin_hunter", "split_comet"].includes(source.shop?.selectedXlBullet))
+            ? source.shop.selectedXlBullet
+            : "twin_hunter",
           maxEvolutionTier: Number.isFinite(source.shop?.maxEvolutionTier)
             ? clamp(Math.round(source.shop.maxEvolutionTier), 4, 11)
             : 4
@@ -2612,13 +2599,13 @@
           achievements,
           attackLoadout: selectedLoadout,
           bulletColor: normalizeHexColor(source.bulletColor, "#ffd76a"),
+          showBossTimer: source.showBossTimer !== false,
           controls: normalizeControlBindings(source.controls),
           operations: {
             cents: Number.isFinite(source.operations?.cents) ? Math.round(source.operations.cents) : 0,
             wrongCount: Number.isFinite(source.operations?.wrongCount) ? Math.max(0, Math.round(source.operations.wrongCount)) : 0,
             cooldownUntil: Number.isFinite(source.operations?.cooldownUntil) ? source.operations.cooldownUntil : 0
           },
-          tutorialCompleted: typeof source.tutorialCompleted === "boolean" ? source.tutorialCompleted : hasExistingProgress,
           shop,
           bossRecords: {
             architect: Boolean(source.bossRecords?.architect),
@@ -2626,7 +2613,8 @@
             monarch: Boolean(source.bossRecords?.monarch),
             cesium: Boolean(source.bossRecords?.cesium),
             tantalum: Boolean(source.bossRecords?.tantalum),
-            luminosity: Boolean(source.bossRecords?.luminosity)
+            luminosity: Boolean(source.bossRecords?.luminosity),
+            sili: Boolean(source.bossRecords?.sili)
           },
           skin: {
             preset: source.skin?.preset || "gold",
@@ -2663,6 +2651,7 @@
         score: 0,
         bullets: [],
         playerShots: [],
+        xlMissiles: [],
         sparks: [],
         flashes: [],
         spawnTimer: 0,
@@ -2676,6 +2665,7 @@
         manualScale: 1,
         timeScale: 1,
         currentBoss: "architect",
+        bossFightTimer: 0,
         bossHealth: 1200,
         bossMaxHealth: 1200,
         bossPhase: 1,
@@ -2683,6 +2673,8 @@
         cutsceneTime: 0,
         cutscenePulseCount: 0,
         ultimateCharge: 0,
+        xlChargeProgress: 0,
+        xlAmmo: 0,
         bruteforceTimer: 0,
         fpsUnlockTimer: 0,
         fpsUnlockGlitchTimer: 0,
@@ -2706,8 +2698,6 @@
         operationsDragItem: null,
         controlRebindAction: null,
         controlRebindMessage: "",
-        menuNotice: "",
-        tutorial: createDefaultTutorialState(),
         menuAmbientBosses: [],
         menuAmbientSignature: "",
         menuAmbientLastTime: 0,
@@ -2827,6 +2817,42 @@
           beamAngle: 0,
           flicker: 0,
           shards: []
+        },
+        sili: {
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          phase: 1,
+          orbitAngle: 0,
+          orbitRadius: 90,
+          driftTimer: 0,
+          targetX: 0,
+          targetY: 0,
+          tetherPulseTimer: 0,
+          tetherPulse: 0,
+          cursorTimer: 0,
+          cursors: [],
+          binaries: [],
+          beamTimer: 0,
+          beams: [],
+          sparkTimer: 0,
+          sparks: [],
+          polarityTimer: 0,
+          polarityMode: "pull",
+          busTimer: 0,
+          busLines: [],
+          cubeTimer: 0,
+          cubeHold: 0,
+          cubes: [],
+          dashTimer: 0,
+          dashActive: 0,
+          dashVX: 0,
+          dashVY: 0,
+          errorTimer: 0,
+          fragments: [],
+          staticTrail: [],
+          splitLerp: 0
         },
         settings: {
           volume: Number.isFinite(storedVolume) ? clamp(storedVolume, 0, 1) : 0.65,
@@ -3040,6 +3066,7 @@
         if (state.currentBoss === "cesium") return boss3Music;
         if (state.currentBoss === "tantalum") return boss3Music;
         if (state.currentBoss === "luminosity") return boss3Music;
+        if (state.currentBoss === "sili") return boss3Music;
         return boss1Music;
       }
 
@@ -3223,6 +3250,11 @@
         if (boss3Music) boss3Music.volume = bossVolume;
       }
 
+      function setShowBossTimer(enabled) {
+        state.profile.showBossTimer = enabled;
+        saveProfile();
+      }
+
       function enqueueAchievementToast(id) {
         const def = achievementDefs[id];
         if (!def) return;
@@ -3270,11 +3302,11 @@
       }
 
       function getBossRecordKey(index) {
-        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : "architect";
+        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : "architect";
       }
 
       function getBossIndexFromKey(key) {
-        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : 0;
+        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : key === "sili" ? 6 : 0;
       }
 
       function getBossPayoutCents(key) {
@@ -3347,6 +3379,10 @@
         return state.profile.shop?.ownedUltimates || {};
       }
 
+      function getOwnedXlBullets() {
+        return state.profile.shop?.ownedXlBullets || { twin_hunter: true, split_comet: true };
+      }
+
       function getMaxEvolutionTier() {
         return clamp(state.profile.shop?.maxEvolutionTier || 4, 4, 11);
       }
@@ -3367,6 +3403,26 @@
         }
         state.profile.shop.ownedUltimates[loadout] = true;
         state.profile.attackLoadout = loadout;
+        awardAchievement("arsenal_tuned");
+        saveProfile();
+      }
+
+      function setXlBulletLoadout(id) {
+        if (!getOwnedXlBullets()[id]) return;
+        state.profile.shop.selectedXlBullet = id;
+        saveProfile();
+      }
+
+      function purchaseXlBullet(id) {
+        const meta = xlBulletDefs[id];
+        if (!meta || meta.priceCents <= 0 || getOwnedXlBullets()[id]) return;
+        if (!spendOperationsFunds(meta.priceCents)) {
+          state.operationsFeedback = `Insufficient Operations funds for ${meta.name}.`;
+          state.operationsFeedbackTone = "negative";
+          return;
+        }
+        state.profile.shop.ownedXlBullets[id] = true;
+        state.profile.shop.selectedXlBullet = id;
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -3408,6 +3464,18 @@
         if (player.damageUpgradeLevel >= 4) awardAchievement("max_matrix");
       }
 
+      function addScore(amount) {
+        if (!Number.isFinite(amount) || amount <= 0) return;
+        state.score += amount;
+        state.xlChargeProgress += amount;
+        while (state.xlChargeProgress >= 1200) {
+          state.xlChargeProgress -= 1200;
+          state.xlAmmo += 1;
+          addFlash(player.x, player.y, "rgba(255, 215, 106, 0.38)", 68);
+          addSpark(player.x, player.y, "rgba(255, 235, 168, 0.94)", 10, 120);
+        }
+      }
+
       function getAchievementMarkup(limit = 4) {
         const unlocked = Object.keys(state.profile.achievements);
         if (!unlocked.length) {
@@ -3422,290 +3490,6 @@
       function formatMoney(cents) {
         const sign = cents < 0 ? "-" : "";
         return `${sign}$${(Math.abs(cents) / 100).toFixed(2)}`;
-      }
-
-      function getTutorialMinibossName() {
-        return "Tutorial Boss";
-      }
-
-      function tutorialKeyCaps(...codes) {
-        return `
-          <div class="tutorial-key-row">
-            ${codes.map((code) => `<span class="tutorial-key">${code}</span>`).join('<span class="tutorial-arrow">+</span>')}
-          </div>
-        `;
-      }
-
-      function getTutorialShowcaseMarkup(step) {
-        if (step === 1) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-grid">
-                <div class="tutorial-demo-card">
-                  <strong>Thrust</strong>
-                  ${tutorialKeyCaps(formatControlCode(getControlBinding("thrust_forward")), formatControlCode(getControlBinding("thrust_reverse")))}
-                  <div class="tutorial-demo-copy">Press both thrust keys during this step so the tutorial can confirm forward and reverse movement.</div>
-                </div>
-                <div class="tutorial-demo-card">
-                  <strong>Turn</strong>
-                  ${tutorialKeyCaps(formatControlCode(getControlBinding("turn_left")), formatControlCode(getControlBinding("turn_right")))}
-                  <div class="tutorial-demo-copy">Tap each turning key to rotate your ship left and right before moving on.</div>
-                </div>
-              </div>
-            </div>
-          `;
-        }
-        if (step === 2) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-grid">
-                <div class="tutorial-demo-card">
-                  <strong>Mouse Aim</strong>
-                  ${tutorialKeyCaps("MOUSE")}
-                  <div class="tutorial-demo-copy">Move your cursor away from the ship so the drift assist visibly pulls you toward the aim point.</div>
-                </div>
-                <div class="tutorial-demo-card">
-                  <strong>Focus Fire</strong>
-                  ${tutorialKeyCaps(formatControlCode(getControlBinding("focus")))}
-                  <div class="tutorial-demo-copy">Hold this while firing to tighten your bullet spread and make the pattern visibly narrower.</div>
-                </div>
-              </div>
-            </div>
-          `;
-        }
-        if (step === 3) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-grid">
-                <div class="tutorial-demo-card">
-                  <strong>Slow Time</strong>
-                  ${tutorialKeyCaps(formatControlCode(getControlBinding("slow")))}
-                  <div class="tutorial-demo-copy">Press this to visibly drag the chrono meter downward and create more room around bullets.</div>
-                </div>
-                <div class="tutorial-demo-card">
-                  <strong>Speed Time</strong>
-                  ${tutorialKeyCaps(formatControlCode(getControlBinding("fast")))}
-                  <div class="tutorial-demo-copy">Press this to spike the chrono meter upward and reposition quickly.</div>
-                </div>
-              </div>
-            </div>
-          `;
-        }
-        if (step === 4) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-card">
-                <strong>Chrono Hold</strong>
-                ${tutorialKeyCaps(formatControlCode(getControlBinding("pause")))}
-                <div class="tutorial-demo-copy">This opens the in-fight pause/shop panel. The next screen will show the real menu and ask you to buy Damage Matrix with score.</div>
-              </div>
-            </div>
-          `;
-        }
-        if (step === 5) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-card">
-                <strong>${getTutorialMinibossName()}</strong>
-                <div class="tutorial-demo-copy">A compact training target with a bright core, stabilizer fins, and readable patterns. Keep moving, shoot constantly, and prepare to fire your ultimate when prompted.</div>
-              </div>
-            </div>
-          `;
-        }
-        if (step === 6) {
-          return `
-            <div class="tutorial-demo">
-              <div class="tutorial-demo-grid">
-                <div class="tutorial-demo-card">
-                  <strong>Kinetic Well Full</strong>
-                  ${tutorialKeyCaps("LEFT CLICK")}
-                  <div class="tutorial-demo-copy">Your ultimate is ready. Click once to discharge it into the boss.</div>
-                </div>
-                <div class="tutorial-demo-card">
-                  <strong>Finish The Drill</strong>
-                  ${tutorialKeyCaps("SHOOT")}
-                  <div class="tutorial-demo-copy">After the ultimate lands, keep firing until the training boss breaks apart and the full menu unlocks.</div>
-                </div>
-              </div>
-            </div>
-          `;
-        }
-        return `
-          <div class="tutorial-demo">
-            <div class="tutorial-demo-grid">
-              <div class="tutorial-demo-card">
-                <strong>Movement</strong>
-                ${tutorialKeyCaps(formatControlCode(getControlBinding("thrust_forward")), formatControlCode(getControlBinding("thrust_reverse")), formatControlCode(getControlBinding("turn_left")), formatControlCode(getControlBinding("turn_right")))}
-                <div class="tutorial-demo-copy">Move, reverse, and rotate to stay alive inside the arena.</div>
-              </div>
-              <div class="tutorial-demo-card">
-                <strong>Aim And Time</strong>
-                ${tutorialKeyCaps("MOUSE", formatControlCode(getControlBinding("focus")), formatControlCode(getControlBinding("slow")), formatControlCode(getControlBinding("fast")))}
-                <div class="tutorial-demo-copy">Aim with the mouse, tighten with focus, and bend time on demand.</div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      function showTutorialPrompt(title, body, resumeStep = null, buttonLabel = "Continue") {
-        state.mode = "paused";
-        state.tutorial.promptTitle = title;
-        state.tutorial.promptBody = Array.isArray(body) ? body : [body];
-        state.tutorial.promptResumeStep = resumeStep;
-        state.tutorial.promptButton = buttonLabel;
-        const showcaseStep = resumeStep ?? state.tutorial.step;
-        overlay.innerHTML = `
-          <div class="message">
-            <h1>${title}</h1>
-            ${state.tutorial.promptBody.map((line) => `<p>${line}</p>`).join("")}
-            ${getTutorialShowcaseMarkup(showcaseStep)}
-            <div class="config-actions" style="justify-content:center;">
-              <button class="menu-button menu-hoverable" data-tutorial-continue>${buttonLabel}</button>
-            </div>
-          </div>
-        `;
-        overlay.classList.add("show");
-        updateHudVisibility();
-      }
-
-      function resetTutorialRunState() {
-        state.tutorial = createDefaultTutorialState();
-      }
-
-      function finishTutorial() {
-        state.profile.tutorialCompleted = true;
-        state.menuNotice = "Tutorial complete. All combat systems and menus are now unlocked.";
-        saveProfile();
-        resetTutorialRunState();
-        returnToMenu();
-      }
-
-      function beginTutorialCombat() {
-        state.tutorial.step = 5;
-        state.mode = "playing";
-        state.score = Math.max(state.score, 700);
-        state.elapsed = 0;
-        state.bossDamageDealt = 0;
-        state.ultimateCharge = 0;
-        state.spawnTimer = 0.9;
-        state.waveTimer = 2.2;
-        clearEnemyHazards();
-        overlay.classList.remove("show");
-        updateHudVisibility();
-      }
-
-      function startTutorial() {
-        resetGame("playing");
-        state.currentBoss = "architect";
-        state.bossMaxHealth = 560;
-        state.bossHealth = state.bossMaxHealth;
-        state.bossPhase = 1;
-        state.score = 0;
-        player.maxHealth = 5;
-        player.health = player.maxHealth;
-        player.damageUpgradeLevel = 0;
-        player.damageMultiplier = 1;
-        player.healthBufferBuys = 0;
-        player.strain = player.maxStrain;
-        player.evolutionLevel = 1;
-        player.angle = -Math.PI / 2;
-        input.keys.clear();
-        input.mouseDown = false;
-        input.hasMouse = false;
-        input.mouseX = player.x;
-        input.mouseY = player.y - 120;
-        state.menuNotice = "";
-        resetTutorialRunState();
-        state.tutorial.active = true;
-        state.tutorial.step = 0;
-        showTutorialPrompt(
-          "Tutorial / Systems Brief",
-          [
-            `Move with ${formatControlCode(getControlBinding("thrust_forward"))} and ${formatControlCode(getControlBinding("thrust_reverse"))}, rotate with ${formatControlCode(getControlBinding("turn_left"))} and ${formatControlCode(getControlBinding("turn_right"))}, and guide your ship by moving the mouse.`,
-            `Hold ${formatControlCode(getControlBinding("focus"))} to tighten your spread, press ${formatControlCode(getControlBinding("slow"))} to slow time, press ${formatControlCode(getControlBinding("fast"))} to surge faster, and click when your kinetic well is full to fire your ultimate.`,
-            `During boss fights, press ${formatControlCode(getControlBinding("pause"))} to open Chrono Hold and spend score. If you get destroyed, press ${formatControlCode(getControlBinding("restart"))} or click to retry.`
-          ],
-          1,
-          "Begin Tutorial"
-        );
-      }
-
-      function updateTutorial(dt) {
-        if (!state.tutorial.active || state.mode !== "playing") return;
-
-        if (state.currentBoss === "architect" && state.tutorial.step < 5) {
-          clearEnemyHazards();
-        }
-
-        if (state.tutorial.step === 1) {
-          if (actionPressed("thrust_forward")) state.tutorial.movement.forward = true;
-          if (actionPressed("thrust_reverse")) state.tutorial.movement.reverse = true;
-          if (actionPressed("turn_left")) state.tutorial.movement.left = true;
-          if (actionPressed("turn_right")) state.tutorial.movement.right = true;
-          if (Object.values(state.tutorial.movement).every(Boolean)) {
-            showTutorialPrompt(
-              "Aiming And Focus",
-              [
-                "Good. Move the mouse around to guide your ship while keeping your nose pointed for fire control.",
-                `While aiming, hold ${formatControlCode(getControlBinding("focus"))} to engage focus fire and tighten your spread for precision bursts.`
-              ],
-              2
-            );
-          }
-          return;
-        }
-
-        if (state.tutorial.step === 2) {
-          const mouseDistance = Math.hypot(input.mouseX - player.x, input.mouseY - player.y);
-          if (input.hasMouse && mouseDistance > 80) state.tutorial.sawMouseAim = true;
-          if (actionPressed("focus")) state.tutorial.heldFocus = true;
-          if (state.tutorial.sawMouseAim && state.tutorial.heldFocus) {
-            showTutorialPrompt(
-              "Chrono Control",
-              [
-                `Use ${formatControlCode(getControlBinding("slow"))} to slow time and create safe lanes through dense patterns.`,
-                `Use ${formatControlCode(getControlBinding("fast"))} to accelerate the timeline when you need to reposition or push damage faster.`
-              ],
-              3
-            );
-          }
-          return;
-        }
-
-        if (state.tutorial.step === 3) {
-          if (actionPressed("slow")) state.tutorial.usedSlow = true;
-          if (actionPressed("fast")) state.tutorial.usedFast = true;
-          if (state.tutorial.usedSlow && state.tutorial.usedFast) {
-            state.score = Math.max(state.score, 1200);
-            showTutorialPrompt(
-              "Chrono Hold",
-              [
-                `Next, open the in-fight boss menu with ${formatControlCode(getControlBinding("pause"))}.`,
-                "Inside Chrono Hold you can spend score on upgrades. Open it, then buy one Damage Matrix upgrade before continuing."
-              ],
-              4,
-              "Resume"
-            );
-          }
-          return;
-        }
-
-        if (state.tutorial.step === 5 && !state.tutorial.usedUltimate) {
-          if (state.ultimateCharge < 100 && (state.bossDamageDealt >= 150 || state.elapsed >= 10)) {
-            state.ultimateCharge = 100;
-          }
-          if (state.ultimateCharge < 100) return;
-          showTutorialPrompt(
-            "Ultimate Ready",
-            [
-              "Your kinetic well is full.",
-              "Resume, then click to discharge your equipped ultimate into the training core."
-            ],
-            6,
-            "Use Ultimate"
-          );
-        }
       }
 
       function getOperationsCooldownRemainingMs(now = Date.now()) {
@@ -4295,8 +4079,6 @@
         const unlockedCount = Object.keys(state.profile.achievements).length;
         const operationsLocked = isOperationsLocked();
         const operationsTimer = operationsLocked ? formatOperationsCountdown(getOperationsCooldownRemainingMs()) : "";
-        const tutorialRequired = isTutorialRequired();
-        const lockCopy = "Complete the tutorial to unlock this system.";
         overlay.innerHTML = `
           <div class="menu-shell">
             <div>
@@ -4304,45 +4086,38 @@
               <div class="menu-subtitle">Chrono-Drift / Neo-Baroque Combat Interface</div>
             </div>
             <div class="menu-stack main-menu-stack">
-              <button class="menu-button menu-hoverable" data-nav="boss_select" ${tutorialRequired ? "disabled" : ""}>
+              <button class="menu-button menu-hoverable" data-nav="boss_select">
                 <span class="menu-button-stack">
                   <span>Boss Battles</span>
-                  <span class="menu-button-meta">${tutorialRequired ? lockCopy : "Enter the arena and challenge cleared or active targets."}</span>
+                  <span class="menu-button-meta">Enter the arena and challenge cleared or active targets.</span>
                 </span>
               </button>
-              <button class="menu-button menu-hoverable" data-nav="tutorial">
-                <span class="menu-button-stack">
-                  <span>Tutorial</span>
-                  <span class="menu-button-meta">${tutorialRequired ? "Mandatory onboarding for first-time pilots." : "Replay the guided combat onboarding and training miniboss."}</span>
-                </span>
-              </button>
-              <button class="menu-button menu-hoverable" data-nav="operations" ${(tutorialRequired || operationsLocked) ? "disabled" : ""}>
+              <button class="menu-button menu-hoverable" data-nav="operations" ${operationsLocked ? "disabled" : ""}>
                 <span class="menu-button-stack">
                   <span>Operations</span>
-                  <span class="menu-button-meta">${tutorialRequired ? lockCopy : operationsLocked ? `Locked ${operationsTimer}` : "Office side work and routine cash jobs."}</span>
+                  <span class="menu-button-meta">${operationsLocked ? `Locked ${operationsTimer}` : "Office side work and routine cash jobs."}</span>
                 </span>
               </button>
-              <button class="menu-button menu-hoverable" data-nav="edit_attacks" ${tutorialRequired ? "disabled" : ""}>
+              <button class="menu-button menu-hoverable" data-nav="edit_attacks">
                 <span class="menu-button-stack">
                   <span>Shop</span>
-                  <span class="menu-button-meta">${tutorialRequired ? lockCopy : "Tune ultimates and evolve your attack patterns."}</span>
+                  <span class="menu-button-meta">Tune ultimates and evolve your attack patterns.</span>
                 </span>
               </button>
-              <button class="menu-button menu-hoverable" data-nav="config" ${tutorialRequired ? "disabled" : ""}>
+              <button class="menu-button menu-hoverable" data-nav="config">
                 <span class="menu-button-stack">
                   <span>Configuration</span>
-                  <span class="menu-button-meta">${tutorialRequired ? lockCopy : "Adjust controls, visuals, audio, and profile settings."}</span>
+                  <span class="menu-button-meta">Adjust controls, visuals, audio, and profile settings.</span>
                 </span>
               </button>
-              <button class="menu-button menu-hoverable" data-nav="achievements" ${tutorialRequired ? "disabled" : ""}>
+              <button class="menu-button menu-hoverable" data-nav="achievements">
                 <span class="menu-button-stack">
                   <span>Achievements</span>
-                  <span class="menu-button-meta">${tutorialRequired ? lockCopy : "Review your unlocks and progress milestones."}</span>
+                  <span class="menu-button-meta">Review your unlocks and progress milestones.</span>
                 </span>
               </button>
             </div>
             <div>
-              ${state.menuNotice ? `<div class="menu-footer" style="margin-bottom: 10px; color: var(--gold-hot);">${state.menuNotice}</div>` : ""}
               <div class="menu-footer">Best Score ${String(Math.floor(state.profile.bestScore)).padStart(6, "0")} / Achievements ${unlockedCount}/${Object.keys(achievementDefs).length}</div>
             </div>
           </div>
@@ -4607,7 +4382,8 @@
                 <div class="controls-diagram">
                   <div class="diagram-row"><span>Mouse</span><span>Precision drift positioning</span></div>
                   ${bindingMarkup}
-                  <div class="diagram-row"><span>Left Click</span><span>Trigger the loaded ultimate when the kinetic well is full</span></div>
+                  <div class="diagram-row"><span>Left Click</span><span>Fire the equipped XL Bullet move if you have a stored XL charge</span></div>
+                  <div class="diagram-row"><span>Right Click</span><span>Trigger the loaded ultimate when the kinetic well is full</span></div>
                   <div class="diagram-row"><span>Mobile</span><span>Use the joystick to drift, the turn buttons to rotate, and the ultimate button to fire</span></div>
                 </div>
                 <div class="config-actions" style="margin-top:18px;">
@@ -4630,6 +4406,10 @@
                 <div class="config-actions">
                   <button class="config-toggle menu-hoverable ${state.settings.menuMusicMuted ? "" : "active"}" data-toggle-menu-music>${state.settings.menuMusicMuted ? "Menu Music Off" : "Menu Music On"}</button>
                   <button class="config-toggle menu-hoverable ${state.settings.bossMusicMuted ? "" : "active"}" data-toggle-boss-music>${state.settings.bossMusicMuted ? "Boss Music Off" : "Boss Music On"}</button>
+                </div>
+                <div class="title" style="margin-top:20px;">Boss Timer</div>
+                <div class="config-actions">
+                  <button class="config-toggle menu-hoverable ${state.profile.showBossTimer ? "active" : ""}" data-toggle-boss-timer>${state.profile.showBossTimer ? "Boss Timer On" : "Boss Timer Off"}</button>
                 </div>
                 <div class="title" style="margin-top:20px;">Skins</div>
                 <div class="skin-grid">${skinMarkup}</div>
@@ -4666,8 +4446,11 @@
         state.mode = "edit_attacks";
         const selected = state.profile.attackLoadout || "graphic_reset";
         const selectedMeta = getAttackLoadoutMeta(selected);
+        const selectedXl = state.profile.shop?.selectedXlBullet || "twin_hunter";
+        const selectedXlMeta = xlBulletDefs[selectedXl] || xlBulletDefs.twin_hunter;
         const funds = state.profile.operations?.cents || 0;
         const ownedUltimates = getOwnedUltimates();
+        const ownedXlBullets = getOwnedXlBullets();
         const ultimateMarkup = Object.entries(attackLoadoutDefs).map(([id, meta]) => {
           const owned = Boolean(ownedUltimates[id]);
           const selectedClass = selected === id ? "active" : "";
@@ -4687,6 +4470,28 @@
                 ${actionMarkup}
               </div>
               <div class="menu-footer" style="text-align:left; margin-top:10px;">${owned ? "Owned and ready for boss deployment." : `Unlock price ${priceLabel}.`}</div>
+            </article>
+          `;
+        }).join("");
+        const xlMarkup = Object.entries(xlBulletDefs).map(([id, meta]) => {
+          const owned = Boolean(ownedXlBullets[id]);
+          const selectedClass = selectedXl === id ? "active" : "";
+          const priceLabel = meta.priceCents > 0 ? formatMoney(meta.priceCents) : "Included";
+          const actionMarkup = owned
+            ? `<button class="config-toggle ${selectedXl === id ? "active" : ""}" data-xl-loadout="${id}">${selectedXl === id ? "Equipped" : "Equip"}</button>`
+            : `<button class="config-toggle" data-shop-buy-xl="${id}" ${funds < meta.priceCents ? "disabled" : ""}>Buy ${priceLabel}</button>`;
+          return `
+            <article class="config-card">
+              <div class="title">${meta.priceCents > 0 ? "Premium XL Bullet" : "Core XL Bullet"}</div>
+              <div class="value" style="font-size: 24px;">${meta.name}</div>
+              <p class="boss-card-copy" style="margin: 14px 0 18px;">${meta.desc}</p>
+              <div class="config-actions">
+                <button class="attack-option ${selectedClass}" data-xl-loadout="${id}" ${owned ? "" : "disabled"}>
+                  <strong>${owned ? (selectedXl === id ? "Selected" : "Owned") : "Locked"}</strong>
+                </button>
+                ${actionMarkup}
+              </div>
+              <div class="menu-footer" style="text-align:left; margin-top:10px;">${owned ? `${meta.missileCount} missile${meta.missileCount === 1 ? "" : "s"} · ${(meta.damagePercent * 100).toFixed(1)}% boss max health each.` : `Unlock price ${priceLabel}.`}</div>
             </article>
           `;
         }).join("");
@@ -4723,9 +4528,11 @@
                 <div class="title">Funds</div>
                 <div class="value" style="font-size: 28px;">${formatMoney(funds)}</div>
                 <div class="controls-diagram">
-                  <div class="diagram-row"><span>Left Click</span><span>Trigger the equipped ultimate once the kinetic well is full</span></div>
+                  <div class="diagram-row"><span>Left Click</span><span>Fire the equipped XL Bullet move if you have at least 1 XL charge</span></div>
+                  <div class="diagram-row"><span>Right Click</span><span>Trigger the equipped ultimate once the kinetic well is full</span></div>
                   <div class="diagram-row"><span>Q</span><span>Focus-combine later evolution bullet spreads for tighter damage</span></div>
-                  <div class="diagram-row"><span>Charge</span><span>Builds from boss damage dealt, with a smaller surge when you take damage</span></div>
+                  <div class="diagram-row"><span>Ultimate</span><span>Builds from boss damage dealt, with a smaller surge when you take damage</span></div>
+                  <div class="diagram-row"><span>XL Charge</span><span>Every 1200 score adds 1 XL Bullet use, and unused charges can stack</span></div>
                   <div class="diagram-row"><span>Evolve</span><span>Boss damage raises your plane from I toward your purchased cap</span></div>
                 </div>
                 <div class="menu-footer" style="text-align:left; margin-top:18px;">Operations balance is used for purchases. Upgrades unlock in strict order.</div>
@@ -4736,6 +4543,11 @@
                 <p class="menu-footer" style="text-align:left; margin-top:16px;">
                   ${selectedMeta.desc}
                 </p>
+                <div class="title" style="margin-top:18px;">Current XL Bullet</div>
+                <div class="value" style="font-size: 22px;">${selectedXlMeta.name}</div>
+                <p class="menu-footer" style="text-align:left; margin-top:16px;">
+                  ${selectedXlMeta.desc}
+                </p>
               </section>
             </div>
             <div class="config-grid" style="margin-top: 20px;">
@@ -4743,6 +4555,12 @@
                 <div class="title">Ultimates</div>
                 <div class="shop-grid">${ultimateMarkup}</div>
               </section>
+              <section class="config-card">
+                <div class="title">XL Bullets</div>
+                <div class="shop-grid">${xlMarkup}</div>
+              </section>
+            </div>
+            <div class="config-grid" style="margin-top: 20px;">
               <section class="config-card">
                 <div class="title">Plane Evolutions</div>
                 <div class="shop-grid">${evolutionMarkup}</div>
@@ -4919,18 +4737,57 @@
         };
       }
 
+      function resetSiliState() {
+        state.sili = {
+          x: centerX,
+          y: height * 0.26,
+          vx: 0,
+          vy: 0,
+          phase: 1,
+          orbitAngle: 0,
+          orbitRadius: 92,
+          driftTimer: 0.8,
+          targetX: centerX,
+          targetY: height * 0.26,
+          tetherPulseTimer: 1.7,
+          tetherPulse: 0,
+          cursorTimer: 0.55,
+          cursors: [],
+          binaries: [],
+          beamTimer: 1.4,
+          beams: [],
+          sparkTimer: 1.1,
+          sparks: [],
+          polarityTimer: 2.1,
+          polarityMode: "pull",
+          busTimer: 1.4,
+          busLines: [],
+          cubeTimer: 2.5,
+          cubeHold: 0,
+          cubes: [],
+          dashTimer: 1.2,
+          dashActive: 0,
+          dashVX: 0,
+          dashVY: 0,
+          errorTimer: 1.45,
+          fragments: [],
+          staticTrail: [],
+          splitLerp: 0
+        };
+      }
+
       function startBossEncounter(index) {
         if (state.profile.bossRecords[getBossRecordKey(index)]) {
           awardAchievement("resurrected");
         }
-        state.currentBoss = index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : "architect";
+        state.currentBoss = index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : "architect";
         if (state.currentBoss === "architect") {
           startArchitectCutscene();
           return;
         }
         resetGame("cutscene");
-        state.currentBoss = index === 5 ? "luminosity" : index === 4 ? "tantalum" : index === 3 ? "cesium" : index === 2 ? "monarch" : "sovereign";
-        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : 2400;
+        state.currentBoss = index === 6 ? "sili" : index === 5 ? "luminosity" : index === 4 ? "tantalum" : index === 3 ? "cesium" : index === 2 ? "monarch" : "sovereign";
+        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : 2400;
         state.bossHealth = state.bossMaxHealth;
         state.bossPhase = 1;
         state.cutsceneTime = 0;
@@ -4940,6 +4797,7 @@
         resetCesiumState();
         resetTantalumState();
         resetLuminosityState();
+        resetSiliState();
         playMusic("boss");
         overlay.innerHTML = `<div class="warning-shell"><div class="warning-text" id="warningText"></div></div>`;
         overlay.classList.add("show");
@@ -4960,20 +4818,18 @@
       }
 
       function restartCurrentEncounter() {
-        if (state.tutorial.active) {
-          startTutorial();
-          return;
-        }
-        const bossIndex = state.currentBoss === "sovereign" ? 1 : state.currentBoss === "monarch" ? 2 : state.currentBoss === "cesium" ? 3 : state.currentBoss === "tantalum" ? 4 : state.currentBoss === "luminosity" ? 5 : 0;
+        const bossIndex = state.currentBoss === "sovereign" ? 1 : state.currentBoss === "monarch" ? 2 : state.currentBoss === "cesium" ? 3 : state.currentBoss === "tantalum" ? 4 : state.currentBoss === "luminosity" ? 5 : state.currentBoss === "sili" ? 6 : 0;
         startBossEncounter(bossIndex);
       }
 
       function resetGame(nextMode = "playing") {
         state.mode = nextMode;
         state.currentBoss = "architect";
+        state.bossFightTimer = 0;
         state.score = 0;
         state.bullets.length = 0;
         state.playerShots.length = 0;
+        state.xlMissiles.length = 0;
         state.sparks.length = 0;
         state.flashes.length = 0;
         state.spawnTimer = 0;
@@ -4995,6 +4851,8 @@
         state.tookDamageThisRun = false;
         state.bossDamageFlash = 0;
         state.ultimateCharge = 0;
+        state.xlChargeProgress = 0;
+        state.xlAmmo = 0;
         state.bruteforceTimer = 0;
         state.fpsUnlockTimer = 0;
         state.fpsUnlockGlitchTimer = 0;
@@ -5007,6 +4865,7 @@
         resetCesiumState();
         resetTantalumState();
         resetLuminosityState();
+        resetSiliState();
         player.x = centerX;
         player.y = height * 0.82;
         player.pullVx = 0;
@@ -5044,9 +4903,9 @@
         state.glitch = 1;
         overlay.innerHTML = `
           <div class="message">
-            <h1>${state.tutorial.active ? "Tutorial Failed" : "Signal Fractured"}</h1>
+            <h1>Signal Fractured</h1>
             <p>Score ${String(Math.floor(state.score)).padStart(6, "0")}</p>
-            <p>${state.tutorial.active ? `Press ${formatControlCode(getControlBinding("restart"))} or click to restart the tutorial encounter.` : "Space or Click to snap back into the drift."}</p>
+            <p>Space or Click to snap back into the drift.</p>
           </div>
         `;
         overlay.classList.add("show");
@@ -5058,10 +4917,6 @@
         state.score -= cost;
         player.damageUpgradeLevel += 1;
         player.damageMultiplier = 1 + player.damageUpgradeLevel * 0.1;
-        if (state.tutorial.active && state.tutorial.step === 4) {
-          state.tutorial.boughtPauseUpgrade = true;
-          state.tutorial.openedPauseMenu = true;
-        }
         awardAchievement("arsenal_tuned");
         renderPauseOverlay();
       }
@@ -5078,23 +4933,11 @@
       }
 
       function renderPauseOverlay() {
-        const tutorialPauseStep = state.tutorial.active ? state.tutorial.step : -1;
-        const tutorialNote = tutorialPauseStep === 4
-          ? `
-            <div class="config-card" style="text-align:left; margin-bottom:16px;">
-              <div class="title">Tutorial Step / Chrono Hold</div>
-              <div class="value" style="font-size:18px; margin-top:6px;">Buy 1 Damage Matrix upgrade</div>
-              <div class="menu-footer" style="text-align:left; margin-top:10px;">This menu appears during boss fights when you press ${formatControlCode(getControlBinding("pause"))}. Spend your score here before resuming.</div>
-            </div>
-          `
-          : "";
-        const continueDisabled = tutorialPauseStep === 4 && player.damageUpgradeLevel < 1 ? "disabled" : "";
         overlay.innerHTML = `
           <div class="message">
             <h1>Chrono Hold</h1>
             <p>Score ${String(Math.floor(state.score)).padStart(6, "0")}</p>
             <p>${isMobileClient ? "Tap Continue or the pause icon to resume." : "Press Esc or Continue to resume."}</p>
-            ${tutorialNote}
             <div class="shop-grid">
               <div class="shop-item">
                 <strong>Damage Matrix</strong>
@@ -5113,7 +4956,7 @@
             </div>
             <div class="config-actions" style="justify-content:center;">
               <button class="menu-button menu-hoverable" data-pause-menu>Return To Menu</button>
-              <button class="menu-button menu-hoverable" data-pause-continue ${continueDisabled}>Continue</button>
+              <button class="menu-button menu-hoverable" data-pause-continue>Continue</button>
             </div>
           </div>
         `;
@@ -5131,9 +4974,6 @@
           input.mobileJoystickActive = false;
           input.mobileJoystickX = 0;
           input.mobileJoystickY = 0;
-          if (state.tutorial.active && state.tutorial.step === 4) {
-            state.tutorial.openedPauseMenu = true;
-          }
           state.mode = "paused";
           renderPauseOverlay();
           updateHudVisibility();
@@ -5141,11 +4981,6 @@
         }
 
         if (state.mode === "paused") {
-          if (state.tutorial.active && state.tutorial.step === 4 && player.damageUpgradeLevel < 1) {
-            renderPauseOverlay();
-            updateHudVisibility();
-            return;
-          }
           input.keys.clear();
           state.mode = "playing";
           overlay.classList.remove("show");
@@ -5173,6 +5008,13 @@
         state.luminosity.barriers.length = 0;
         state.luminosity.detachedElectrons.length = 0;
         state.luminosity.freeElectrons.length = 0;
+        state.sili.cursors.length = 0;
+        state.sili.binaries.length = 0;
+        state.sili.beams.length = 0;
+        state.sili.sparks.length = 0;
+        state.sili.busLines.length = 0;
+        state.sili.fragments.length = 0;
+        state.sili.staticTrail.length = 0;
       }
 
       function updateEvolutionProgressFromBossDamage() {
@@ -5334,6 +5176,34 @@
               remove: () => state.luminosity.freeElectrons.splice(index, 1)
             });
           }
+        } else if (state.currentBoss === "sili") {
+          if (state.sili.cursors.length) {
+            const index = Math.floor(Math.random() * state.sili.cursors.length);
+            const cursor = state.sili.cursors[index];
+            candidates.push({
+              x: cursor.x,
+              y: cursor.y,
+              remove: () => state.sili.cursors.splice(index, 1)
+            });
+          }
+          if (state.sili.binaries.length) {
+            const index = Math.floor(Math.random() * state.sili.binaries.length);
+            const bullet = state.sili.binaries[index];
+            candidates.push({
+              x: bullet.x,
+              y: bullet.y,
+              remove: () => state.sili.binaries.splice(index, 1)
+            });
+          }
+          if (state.sili.sparks.length) {
+            const index = Math.floor(Math.random() * state.sili.sparks.length);
+            const spark = state.sili.sparks[index];
+            candidates.push({
+              x: spark.x,
+              y: spark.y,
+              remove: () => state.sili.sparks.splice(index, 1)
+            });
+          }
         }
         if (!candidates.length || Math.random() > 0.3) return;
         const chosen = candidates[Math.floor(Math.random() * candidates.length)];
@@ -5349,10 +5219,6 @@
         const loadout = state.profile.attackLoadout || "graphic_reset";
         state.ultimateCharge = 0;
         state.ultimateFlash = 0.32;
-        if (state.tutorial.active) {
-          state.tutorial.usedUltimate = true;
-          if (state.tutorial.step < 7) state.tutorial.step = 7;
-        }
         triggerImpactFrame("special", 1);
         state.glitch = Math.max(state.glitch, 1);
         state.shake = Math.max(state.shake, 24);
@@ -5395,6 +5261,69 @@
         damageBoss(state.bossMaxHealth * 0.2, { awardCharge: false });
         addFlash(centerX, centerY, "rgba(255, 255, 255, 0.95)", Math.max(width, height) * 0.9);
         addSpark(centerX, centerY, "rgba(255, 255, 255, 0.95)", 80, 360);
+      }
+
+      function getBossTargetState() {
+        return {
+          pos: state.currentBoss === "architect"
+            ? getVortexPosition()
+            : state.currentBoss === "sovereign"
+            ? { x: state.sovereign.x, y: state.sovereign.y }
+            : state.currentBoss === "monarch"
+            ? { x: state.nullBoss.x, y: state.nullBoss.y }
+            : state.currentBoss === "cesium"
+            ? { x: state.cesium.x, y: state.cesium.y }
+          : state.currentBoss === "tantalum"
+          ? { x: state.tantalum.x, y: state.tantalum.y }
+          : state.currentBoss === "luminosity"
+          ? { x: state.luminosity.x, y: state.luminosity.y }
+          : { x: state.sili.x, y: state.sili.y },
+          radius: state.currentBoss === "architect"
+            ? 58
+            : state.currentBoss === "sovereign"
+            ? 66
+            : state.currentBoss === "monarch"
+            ? 64
+            : state.currentBoss === "cesium"
+            ? 68
+            : state.currentBoss === "tantalum"
+            ? 72
+            : state.currentBoss === "luminosity"
+            ? getLuminosityCoreRadius()
+            : 82
+        };
+      }
+
+      function useXlBullet() {
+        if (state.mode !== "playing" || state.xlAmmo <= 0) return;
+        const xlId = state.profile.shop?.selectedXlBullet || "twin_hunter";
+        const meta = xlBulletDefs[xlId] || xlBulletDefs.twin_hunter;
+        state.xlAmmo -= 1;
+        const forwardX = Math.cos(player.angle);
+        const forwardY = Math.sin(player.angle);
+        const sideX = -forwardY;
+        const sideY = forwardX;
+        for (let i = 0; i < meta.missileCount; i++) {
+          const offsetIndex = i - (meta.missileCount - 1) * 0.5;
+          const offset = offsetIndex * meta.spread;
+          state.xlMissiles.push({
+            type: xlId,
+            x: player.x + sideX * offset + forwardX * 18,
+            y: player.y + sideY * offset + forwardY * 18,
+            vx: forwardX * meta.speed,
+            vy: forwardY * meta.speed,
+            life: meta.life,
+            damage: state.bossMaxHealth * meta.damagePercent,
+            turnRate: meta.turnRate,
+            maxSpeed: meta.speed,
+            size: 8 + meta.damagePercent * 220,
+            color: meta.color,
+            accent: meta.accent,
+            trail: []
+          });
+        }
+        addFlash(player.x, player.y, "rgba(255, 215, 106, 0.42)", 76);
+        addSpark(player.x, player.y, meta.accent, 18, 180);
       }
 
       function damagePlayer(amount, reason = "impact") {
@@ -7268,6 +7197,442 @@
         applyThreatResponse(dt, nearest, closeCount);
       }
 
+      function getSiliUnitStates() {
+        const s = state.sili;
+        const phaseScale = s.phase === 1 ? 1.25 : s.phase === 2 ? 1.3 : s.phase === 3 ? 1.35 : 1.485;
+        if (s.phase === 4) {
+          return {
+            merged: true,
+            center: { x: s.x, y: s.y },
+            tetherActive: false,
+            unitA: { x: s.x, y: s.y, size: 38 * phaseScale, color: "#5ce8ff" },
+            unitB: { x: s.x, y: s.y, size: 38 * phaseScale, color: "#ff5af1" },
+            mergedWidth: 146 * phaseScale,
+            mergedHeight: 96 * phaseScale
+          };
+        }
+        const orbitX = s.phase === 2 ? lerp(88, width * 0.32, s.splitLerp) : Math.cos(s.orbitAngle) * s.orbitRadius;
+        const orbitY = s.phase === 2 ? 0 : Math.sin(s.orbitAngle) * (s.phase === 3 ? s.orbitRadius * 0.52 : s.orbitRadius * 0.72);
+        return {
+          merged: false,
+          center: { x: s.x, y: s.y },
+          tetherActive: true,
+          unitA: { x: s.x + orbitX, y: s.y + orbitY, size: 28 * phaseScale, color: "#5ce8ff" },
+          unitB: { x: s.x - orbitX, y: s.y - orbitY, size: 28 * phaseScale, color: "#ff5af1" }
+        };
+      }
+
+      function distanceToSegment(px, py, ax, ay, bx, by) {
+        const abx = bx - ax;
+        const aby = by - ay;
+        const denom = abx * abx + aby * aby || 1;
+        const t = clamp(((px - ax) * abx + (py - ay) * aby) / denom, 0, 1);
+        const sx = ax + abx * t;
+        const sy = ay + aby * t;
+        return Math.hypot(px - sx, py - sy);
+      }
+
+      function getSiliBeamSegments(beam) {
+        const gapSize = 92;
+        const dx = beam.x2 - beam.x1;
+        const dy = beam.y2 - beam.y1;
+        const length = Math.hypot(dx, dy) || 1;
+        const gapT = clamp((gapSize * 0.5) / length, 0.08, 0.24);
+        const t1 = 0.5 - gapT;
+        const t2 = 0.5 + gapT;
+        return [
+          {
+            x1: beam.x1,
+            y1: beam.y1,
+            x2: beam.x1 + dx * t1,
+            y2: beam.y1 + dy * t1
+          },
+          {
+            x1: beam.x1 + dx * t2,
+            y1: beam.y1 + dy * t2,
+            x2: beam.x2,
+            y2: beam.y2
+          }
+        ];
+      }
+
+      function spawnSiliBinaryRing() {
+        const s = state.sili;
+        const units = getSiliUnitStates();
+        const emitters = [units.unitA, units.unitB];
+        for (let volley = 0; volley < 6; volley++) {
+          for (const emitter of emitters) {
+            for (let i = 0; i < 12; i++) {
+              const angle = (i / 12) * TAU + s.orbitAngle * 0.3 + volley * 0.07;
+              s.binaries.push({
+                x: emitter.x,
+                y: emitter.y,
+                vx: Math.cos(angle) * (180 + volley * 18),
+                vy: Math.sin(angle) * (180 + volley * 18),
+                size: 8,
+                life: 6,
+                delay: volley * 0.13,
+                color: emitter.color === "#5ce8ff" ? "rgba(92, 232, 255, 0.94)" : "rgba(255, 90, 241, 0.94)"
+              });
+            }
+          }
+        }
+        s.tetherPulse = 1;
+      }
+
+      function spawnSiliCursor() {
+        const s = state.sili;
+        s.cursors.push({
+          x: 30 + Math.random() * Math.max(40, width - 60),
+          y: -30,
+          vy: s.phase >= 2 ? 180 + Math.random() * 70 : 130 + Math.random() * 55,
+          jitter: Math.random() * TAU,
+          size: s.phase >= 2 ? 16 : 14,
+          color: Math.random() > 0.5 ? "rgba(92, 232, 255, 0.95)" : "rgba(255, 90, 241, 0.95)",
+          shotTimer: s.phase === 2 ? 2 : 0.7,
+          lockX: player.x,
+          lockY: player.y
+        });
+      }
+
+      function spawnSiliBeam() {
+        const units = getSiliUnitStates();
+        const startY = Math.min(units.unitA.y, units.unitB.y);
+        const segmentHeight = Math.abs(units.unitA.y - units.unitB.y);
+        state.sili.beams.push({
+          x1: units.unitA.x,
+          y1: startY,
+          x2: units.unitB.x,
+          y2: startY + segmentHeight,
+          telegraph: 0.5,
+          active: 1.8,
+          vy: 460
+        });
+      }
+
+      function spawnSiliSparkBullets(sourceX, sourceY, targetX = player.x, targetY = player.y, colorOverride = null, spread = 0.26, burstCount = 1) {
+        const s = state.sili;
+        for (let i = 0; i < burstCount; i++) {
+          const angle = Math.atan2(targetY - sourceY, targetX - sourceX) + (Math.random() - 0.5) * spread;
+          s.sparks.push({
+            x: sourceX,
+            y: sourceY,
+            vx: Math.cos(angle) * 250,
+            vy: Math.sin(angle) * 250,
+            size: 5,
+            life: 3,
+            color: colorOverride || "rgba(214, 205, 255, 0.92)"
+          });
+        }
+      }
+
+      function spawnSiliBusLine(fromLeft) {
+        state.sili.busLines.push({
+          x: fromLeft ? -260 : width + 260,
+          y: 90 + Math.random() * Math.max(60, height - 180),
+          vx: fromLeft ? 270 : -270,
+          width: 280,
+          height: 24,
+          life: 5.5
+        });
+      }
+
+      function spawnSiliCubes() {
+        const s = state.sili;
+        const arenaChoices = [
+          { x: width * 0.22, y: height * 0.28 },
+          { x: width * 0.5, y: height * 0.18 },
+          { x: width * 0.78, y: height * 0.34 },
+          { x: width * 0.28, y: height * 0.64 },
+          { x: width * 0.72, y: height * 0.7 },
+          { x: width * 0.5, y: height * 0.52 }
+        ];
+        for (let i = 0; i < 3; i++) {
+          const choice = arenaChoices.splice(Math.floor(Math.random() * arenaChoices.length), 1)[0];
+          const dx = choice.x - s.x;
+          const dy = choice.y - s.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const speed = 520 + Math.random() * 80;
+          s.cubes.push({
+            x: s.x + (dx / dist) * 52,
+            y: s.y + (dy / dist) * 52,
+            targetX: choice.x,
+            targetY: choice.y,
+            vx: (dx / dist) * speed,
+            vy: (dy / dist) * speed,
+            size: 340 + Math.random() * 80,
+            telegraph: 0.44,
+            active: 5.4,
+            color: i % 2 === 0 ? "rgba(92, 232, 255, 0.95)" : "rgba(255, 90, 241, 0.95)"
+          });
+        }
+      }
+
+      function spawnSiliErrorBurst() {
+        const s = state.sili;
+        for (let i = 0; i < 112; i++) {
+          const angle = (i / 112) * TAU + Math.random() * 0.18;
+          s.fragments.push({
+            x: s.x,
+            y: s.y,
+            vx: Math.cos(angle) * (230 + Math.random() * 340),
+            vy: Math.sin(angle) * (230 + Math.random() * 340),
+            size: 7 + Math.random() * 12,
+            life: 2.8 + Math.random() * 1.6,
+            color: i % 2 === 0 ? "rgba(92, 232, 255, 0.94)" : "rgba(255, 90, 241, 0.94)"
+          });
+        }
+      }
+
+      function updateSiliBoss(dt) {
+        const s = state.sili;
+        const healthRatio = state.bossHealth / Math.max(1, state.bossMaxHealth);
+        s.phase = healthRatio > 0.75 ? 1 : healthRatio > 0.5 ? 2 : healthRatio > 0.25 ? 3 : 4;
+        state.bossPhase = s.phase;
+        const holdingForCubeAttack = s.phase === 3 && s.cubeHold > 0;
+
+        s.driftTimer -= dt;
+        if (s.driftTimer <= 0) {
+          s.driftTimer = s.phase === 4 ? 0.52 + Math.random() * 0.3 : 1.1 + Math.random() * 1.2;
+          s.targetX = s.phase === 4
+            ? 86 + Math.random() * Math.max(40, width - 172)
+            : 110 + Math.random() * Math.max(40, width - 220);
+          s.targetY = s.phase === 4
+            ? 86 + Math.random() * Math.max(40, height - 172)
+            : 86 + Math.random() * Math.max(40, Math.min(height - 130, height * 0.56) - 86);
+        }
+
+        if (holdingForCubeAttack) {
+          s.cubeHold -= dt;
+          if (s.cubeHold <= 0) {
+            s.cubeTimer = 2 + Math.random() * 4;
+            state.shake = Math.max(state.shake, 18);
+          }
+        } else if (s.phase < 4) {
+          s.x += (s.targetX - s.x) * Math.min(1, dt * 1.55);
+          s.y += (s.targetY - s.y) * Math.min(1, dt * 1.42);
+        } else {
+          s.x += (s.targetX - s.x) * Math.min(1, dt * 2.65);
+          s.y += (s.targetY - s.y) * Math.min(1, dt * 2.55);
+          s.staticTrail.push({ x: s.x, y: s.y, life: 0.8, width: 116, height: 54 });
+        }
+        s.x = clamp(s.x, s.phase === 4 ? 56 : 90, width - (s.phase === 4 ? 56 : 90));
+        s.y = clamp(s.y, s.phase === 4 ? 56 : 80, height - (s.phase === 4 ? 56 : 110));
+
+        s.orbitAngle += dt * (s.phase === 3 ? 7.6 : s.phase === 1 ? 2.1 : 0.9);
+        s.orbitRadius = s.phase === 3 ? 62 : 92;
+        s.splitLerp += ((s.phase === 2 ? 1 : 0) - s.splitLerp) * Math.min(1, dt * 3.2);
+
+        const units = getSiliUnitStates();
+        let nearest = Infinity;
+        let closeCount = 0;
+
+        for (const unit of [units.unitA, units.unitB]) {
+          const dist = Math.hypot(player.x - unit.x, player.y - unit.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < 105) closeCount++;
+          if (dist < player.hitRadius + unit.size) damagePlayer(1, "impact");
+        }
+
+        if (units.tetherActive) {
+          const tetherDistance = distanceToSegment(player.x, player.y, units.unitA.x, units.unitA.y, units.unitB.x, units.unitB.y);
+          nearest = Math.min(nearest, tetherDistance);
+          if (tetherDistance < 90) closeCount++;
+          if (tetherDistance < player.hitRadius + 10 + s.tetherPulse * 8) damagePlayer(0.5, "impact");
+        }
+
+        s.tetherPulse = Math.max(0, s.tetherPulse - dt * 2.8);
+        if (s.phase === 1) {
+          s.tetherPulseTimer -= dt;
+          s.cursorTimer -= dt;
+          if (s.tetherPulseTimer <= 0) {
+            s.tetherPulseTimer = 2 + Math.random() * 5;
+            spawnSiliBinaryRing();
+          }
+          if (s.cursorTimer <= 0) {
+            s.cursorTimer = 0.22;
+            spawnSiliCursor();
+          }
+        } else if (s.phase === 2) {
+          s.beamTimer -= dt;
+          s.cursorTimer -= dt;
+          s.sparkTimer -= dt;
+          if (s.beamTimer <= 0) {
+            s.beamTimer = 1 + Math.random() * 4;
+            spawnSiliBeam();
+          }
+          if (s.cursorTimer <= 0) {
+            s.cursorTimer = 0.17;
+            spawnSiliCursor();
+          }
+          if (s.sparkTimer <= 0) {
+            s.sparkTimer = 0.72;
+            const phaseTwoUnits = getSiliUnitStates();
+            spawnSiliSparkBullets(phaseTwoUnits.unitA.x, phaseTwoUnits.unitA.y, player.x, player.y, "rgba(170, 245, 255, 0.92)", 0.2, 1);
+            spawnSiliSparkBullets(phaseTwoUnits.unitB.x, phaseTwoUnits.unitB.y, player.x, player.y, "rgba(255, 175, 246, 0.92)", 0.2, 1);
+          }
+        } else if (s.phase === 3) {
+          s.polarityTimer -= dt;
+          s.busTimer -= dt;
+          s.cubeTimer -= dt;
+          if (s.polarityTimer <= 0) {
+            s.polarityTimer = 1 + Math.random() * 3;
+            s.polarityMode = s.polarityMode === "pull" ? "push" : "pull";
+            s.tetherPulse = 1;
+          }
+          if (s.busTimer <= 0) {
+            s.busTimer = 1.15;
+            spawnSiliBusLine(true);
+            spawnSiliBusLine(false);
+          }
+          if (s.cubeTimer <= 0 && s.cubeHold <= 0) {
+            s.cubeHold = 0.85;
+            spawnSiliCubes();
+            state.shake = Math.max(state.shake, 14);
+          }
+          const cyanDx = units.unitA.x - player.x;
+          const cyanDy = units.unitA.y - player.y;
+          const magDx = units.unitB.x - player.x;
+          const magDy = units.unitB.y - player.y;
+          const cyanDist = Math.hypot(cyanDx, cyanDy) || 1;
+          const magDist = Math.hypot(magDx, magDy) || 1;
+          const cyanForce = s.polarityMode === "pull" ? 180 : -160;
+          const magForce = s.polarityMode === "pull" ? -160 : 180;
+          player.pullVx += ((cyanDx / cyanDist) * cyanForce + (magDx / magDist) * magForce) * dt;
+          player.pullVy += ((cyanDy / cyanDist) * cyanForce + (magDy / magDist) * magForce) * dt;
+        } else {
+          s.errorTimer -= dt;
+          if (s.errorTimer <= 0) {
+            s.errorTimer = 2;
+            spawnSiliErrorBurst();
+          }
+        }
+
+        for (let i = s.cursors.length - 1; i >= 0; i--) {
+          const cursor = s.cursors[i];
+          cursor.jitter += dt * 16;
+          cursor.y += cursor.vy * dt;
+          if (s.phase >= 2) cursor.x += Math.sin(cursor.jitter) * 46 * dt;
+          if (s.phase >= 2) {
+            cursor.shotTimer -= dt;
+            if (cursor.shotTimer <= 0) {
+              cursor.shotTimer = s.phase === 2 ? 2 : 0.7;
+              if (Math.random() < (s.phase === 2 ? 0.35 : 0.4)) {
+                spawnSiliSparkBullets(cursor.x, cursor.y, cursor.lockX, cursor.lockY, cursor.color.replace("0.95", "0.88"), 0.1, 1);
+              }
+            }
+          }
+          const dist = Math.hypot(player.x - cursor.x, player.y - cursor.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < 86) closeCount++;
+          if (dist < player.hitRadius + cursor.size * 0.6) damagePlayer(0.5, "impact");
+          if (cursor.y > height + 60) s.cursors.splice(i, 1);
+        }
+
+        for (let i = s.binaries.length - 1; i >= 0; i--) {
+          const bullet = s.binaries[i];
+          if (bullet.delay > 0) {
+            bullet.delay -= dt;
+            continue;
+          }
+          bullet.x += bullet.vx * dt;
+          bullet.y += bullet.vy * dt;
+          bullet.life -= dt;
+          const dist = Math.hypot(player.x - bullet.x, player.y - bullet.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < 84) closeCount++;
+          if (dist < player.hitRadius + bullet.size * 0.7) damagePlayer(0.5, "impact");
+          if (bullet.life <= 0 || bullet.x < -70 || bullet.x > width + 70 || bullet.y < -70 || bullet.y > height + 70) s.binaries.splice(i, 1);
+        }
+
+        for (let i = s.beams.length - 1; i >= 0; i--) {
+          const beam = s.beams[i];
+          if (beam.telegraph > 0) {
+            beam.telegraph -= dt;
+          } else {
+            beam.active -= dt;
+            beam.y1 += beam.vy * dt;
+            beam.y2 += beam.vy * dt;
+          }
+          const beamSegments = getSiliBeamSegments(beam);
+          const beamDistance = beamSegments.reduce((nearestSegment, segment) => (
+            Math.min(nearestSegment, distanceToSegment(player.x, player.y, segment.x1, segment.y1, segment.x2, segment.y2))
+          ), Infinity);
+          nearest = Math.min(nearest, beamDistance);
+          if (beam.active > 0 && beamDistance < player.hitRadius + 10) damagePlayer(1, "impact");
+          if (beam.telegraph <= 0 && (beam.active <= 0 || Math.min(beam.y1, beam.y2) > height + 140)) s.beams.splice(i, 1);
+        }
+
+        for (let i = s.sparks.length - 1; i >= 0; i--) {
+          const spark = s.sparks[i];
+          spark.x += spark.vx * dt;
+          spark.y += spark.vy * dt;
+          spark.life -= dt;
+          const dist = Math.hypot(player.x - spark.x, player.y - spark.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < player.hitRadius + spark.size) damagePlayer(0.5, "impact");
+          if (spark.life <= 0) s.sparks.splice(i, 1);
+        }
+
+        for (let i = s.busLines.length - 1; i >= 0; i--) {
+          const bus = s.busLines[i];
+          bus.x += bus.vx * dt;
+          bus.life -= dt;
+          if (Math.abs(player.x - bus.x) < bus.width * 0.5 + player.hitRadius && Math.abs(player.y - bus.y) < bus.height * 0.5 + player.hitRadius) {
+            damagePlayer(1, "impact");
+          }
+          const dist = Math.hypot(player.x - bus.x, player.y - bus.y);
+          nearest = Math.min(nearest, dist);
+          if (bus.life <= 0 || bus.x < -320 || bus.x > width + 320) s.busLines.splice(i, 1);
+        }
+
+        for (let i = s.cubes.length - 1; i >= 0; i--) {
+          const cube = s.cubes[i];
+          if (cube.telegraph > 0) {
+            cube.telegraph -= dt;
+          } else {
+            cube.active -= dt;
+            cube.x += cube.vx * dt;
+            cube.y += cube.vy * dt;
+          }
+          const half = cube.size * 0.5;
+          if (Math.abs(player.x - cube.x) < half + player.hitRadius && Math.abs(player.y - cube.y) < half + player.hitRadius) {
+            damagePlayer(cube.telegraph > 0 ? 0.5 : 1, "impact");
+          }
+          const dist = Math.hypot(player.x - cube.x, player.y - cube.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < 120) closeCount++;
+          if (cube.telegraph <= 0 && (cube.active <= 0 || cube.x < -cube.size || cube.x > width + cube.size || cube.y < -cube.size || cube.y > height + cube.size)) {
+            s.cubes.splice(i, 1);
+            if (s.cubes.length === 0) state.shake = Math.max(state.shake, 24);
+          }
+        }
+
+        for (let i = s.fragments.length - 1; i >= 0; i--) {
+          const fragment = s.fragments[i];
+          fragment.x += fragment.vx * dt;
+          fragment.y += fragment.vy * dt;
+          fragment.vx *= 0.992;
+          fragment.vy *= 0.992;
+          fragment.life -= dt;
+          const dist = Math.hypot(player.x - fragment.x, player.y - fragment.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < player.hitRadius + fragment.size * 0.62) damagePlayer(1, "impact");
+          if (fragment.life <= 0) s.fragments.splice(i, 1);
+        }
+
+        for (let i = s.staticTrail.length - 1; i >= 0; i--) {
+          const trail = s.staticTrail[i];
+          trail.life -= dt;
+          if (Math.abs(player.x - trail.x) < trail.width * 0.5 + player.hitRadius && Math.abs(player.y - trail.y) < trail.height * 0.5 + player.hitRadius) {
+            damagePlayer(0.5, "impact");
+          }
+          if (trail.life <= 0) s.staticTrail.splice(i, 1);
+        }
+
+        applyThreatResponse(dt, nearest, closeCount);
+      }
+
       function addSpark(x, y, color, count, speed) {
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * TAU;
@@ -7394,6 +7759,11 @@
               state.cutsceneTime > 1.65
                 ? "Containment 06 Igniting... Lord Luminosity the Noble Neon Taking The Stage."
                 : "Neon Noble Core Warming To A Blinding Red...";
+          } else if (state.currentBoss === "sili") {
+            warningText.textContent =
+              state.cutsceneTime > 1.65
+                ? "Containment 07 Splitting... The Sili Overclock Entering Binary Orbit."
+                : "Logic And Memory Lattices Overclocking...";
           } else {
             warningText.textContent =
               state.cutsceneTime > 1.45
@@ -7422,9 +7792,10 @@
         state.cesium.fragments.length = 0;
         state.tantalum.scraps.length = 0;
         state.luminosity.shards.length = 0;
+        state.sili.fragments.length = 0;
         overlay.innerHTML = `
           <div class="warning-shell">
-            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Architect Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : "Lord Luminosity Dimming. Noble Neon Structure Failing."}</div>
+            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Architect Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : "Sili Overclock Destabilizing. Binary Merge Failure Imminent."}</div>
           </div>
         `;
         overlay.classList.add("show");
@@ -7444,7 +7815,9 @@
           ? { x: state.cesium.x, y: state.cesium.y }
           : state.victoryBoss === "tantalum"
           ? { x: state.tantalum.x, y: state.tantalum.y }
-          : { x: state.luminosity.x, y: state.luminosity.y };
+          : state.victoryBoss === "luminosity"
+          ? { x: state.luminosity.x, y: state.luminosity.y }
+          : { x: state.sili.x, y: state.sili.y };
 
         if (!state.victoryExplosionTriggered && state.victoryTime > 0.15) {
           if (state.victoryBoss === "architect") {
@@ -7561,7 +7934,7 @@
                 color: i % 3 === 0 ? "rgba(240, 248, 255, 0.95)" : "rgba(92, 104, 114, 0.95)"
               });
             }
-          } else {
+          } else if (state.victoryBoss === "luminosity") {
             for (let i = 0; i < 18; i++) {
               const angle = (i / 18) * TAU + Math.random() * 0.3;
               state.luminosity.shards.push({
@@ -7575,6 +7948,19 @@
                 width: 10 + Math.random() * 20,
                 height: 4 + Math.random() * 10,
                 color: i < 8 ? "rgba(255, 120, 120, 0.95)" : "rgba(164, 164, 172, 0.94)"
+              });
+            }
+          } else {
+            for (let i = 0; i < 140; i++) {
+              const angle = Math.random() * TAU;
+              state.sili.fragments.push({
+                x: vortex.x,
+                y: vortex.y,
+                vx: Math.cos(angle) * (30 + Math.random() * 220),
+                vy: Math.sin(angle) * (40 + Math.random() * 170) + 25,
+                size: 2 + Math.random() * 4,
+                life: 2.6 + Math.random() * 1.4,
+                color: i % 3 === 0 ? "rgba(92, 232, 255, 0.92)" : i % 3 === 1 ? "rgba(255, 90, 241, 0.92)" : "rgba(166, 166, 174, 0.88)"
               });
             }
           }
@@ -7602,6 +7988,8 @@
             victoryText.textContent = "Tantalum Collapsed. Blue Charge Dead And Cold.";
           } else if (state.victoryBoss === "luminosity" && state.victoryTime > 3.2) {
             victoryText.textContent = "Lord Luminosity Extinguished. Noble Neon Glow Gone Cold.";
+          } else if (state.victoryBoss === "sili" && state.victoryTime > 3.2) {
+            victoryText.textContent = "Sili Overclock Crashed. Dead Pixels Falling Silent.";
           } else if (state.victoryBoss === "sovereign" && state.victoryTime > 3.2) {
             victoryText.textContent = "Sovereign Fission Complete. Containment Restored.";
           } else if (state.victoryTime > 3.2) {
@@ -7617,7 +8005,9 @@
               ? "Cesium Cones Shearing Free. Core Geometry Collapsing."
               : state.victoryBoss === "tantalum"
               ? "Tantalum Plates Whitening. Capacitor Stack Overloading."
-              : "Luminosity Tubes Shattering. Neon Crown Falling Dark.";
+              : state.victoryBoss === "luminosity"
+              ? "Luminosity Tubes Shattering. Neon Crown Falling Dark."
+              : "Sili Halves Overclocking. Merge Failure Cascading Into Pixel Rain.";
           } else {
             victoryText.textContent = state.victoryBoss === "architect"
               ? "Architect Disassembled. Neural Corridor Stabilizing."
@@ -7629,7 +8019,9 @@
               ? "Cesium Cracking. Cone Detachment Imminent."
               : state.victoryBoss === "tantalum"
               ? "Tantalum Surging White. Scrap Collapse Imminent."
-              : "Lord Luminosity Flickering Scarlet. Neon Failure Imminent.";
+              : state.victoryBoss === "luminosity"
+              ? "Lord Luminosity Flickering Scarlet. Neon Failure Imminent."
+              : "Sili Overclock Vibrating Beyond Tolerance. Binary Collapse Imminent.";
           }
           const fadeStart = 5.6;
           const fadeAlpha = state.victoryTime > fadeStart ? clamp(1 - (state.victoryTime - fadeStart) / 1.2, 0, 1) : 1;
@@ -7722,6 +8114,15 @@
           shard.life -= dt;
           if (shard.life <= 0) state.luminosity.shards.splice(i, 1);
         }
+        for (let i = state.sili.fragments.length - 1; i >= 0; i--) {
+          const fragment = state.sili.fragments[i];
+          fragment.x += fragment.vx * dt;
+          fragment.y += fragment.vy * dt;
+          fragment.vx *= 0.992;
+          fragment.vy = fragment.vy * 0.992 + 26 * dt;
+          fragment.life -= dt;
+          if (fragment.life <= 0) state.sili.fragments.splice(i, 1);
+        }
       }
 
       function returnToMenu() {
@@ -7740,6 +8141,7 @@
         input.mobileJoystickY = 0;
         state.bullets.length = 0;
         state.playerShots.length = 0;
+        state.xlMissiles.length = 0;
         state.sparks.length = 0;
         state.flashes.length = 0;
         state.sovereign.beams.length = 0;
@@ -7766,18 +8168,18 @@
         state.luminosity.detachedElectrons.length = 0;
         state.luminosity.freeElectrons.length = 0;
         state.luminosity.shards.length = 0;
-        if (state.tutorial.active) {
-          resetTutorialRunState();
-        }
+        state.sili.cursors.length = 0;
+        state.sili.binaries.length = 0;
+        state.sili.beams.length = 0;
+        state.sili.sparks.length = 0;
+        state.sili.busLines.length = 0;
+        state.sili.fragments.length = 0;
+        state.sili.staticTrail.length = 0;
         renderMainMenu();
       }
 
       function triggerBossDefeat() {
-        if (state.tutorial.active) {
-          finishTutorial();
-          return;
-        }
-        state.score += 2000;
+        addScore(2000);
         state.profile.operations.cents += getBossPayoutCents(state.currentBoss);
         if (state.currentBoss === "architect") {
           const vortex = getVortexPosition();
@@ -7800,10 +8202,14 @@
           addFlash(state.tantalum.x, state.tantalum.y, "rgba(160, 240, 255, 0.82)", 250);
           addSpark(state.tantalum.x, state.tantalum.y, "rgba(184, 246, 255, 0.96)", 102, 300);
           awardAchievement("tantalum_down");
-        } else {
+        } else if (state.currentBoss === "luminosity") {
           addFlash(state.luminosity.x, state.luminosity.y, "rgba(255, 102, 102, 0.82)", 260);
           addSpark(state.luminosity.x, state.luminosity.y, "rgba(255, 190, 190, 0.96)", 112, 320);
           awardAchievement("luminosity_down");
+        } else {
+          addFlash(state.sili.x, state.sili.y, "rgba(214, 196, 255, 0.82)", 280);
+          addSpark(state.sili.x, state.sili.y, "rgba(255, 214, 252, 0.96)", 128, 340);
+          awardAchievement("sili_down");
         }
         state.profile.bossRecords[state.currentBoss] = true;
         if (player.health >= 1) awardAchievement("survivor");
@@ -8104,18 +8510,9 @@
       }
 
       function updatePlayerShots(dt) {
-        const bossPos = state.currentBoss === "architect"
-          ? getVortexPosition()
-          : state.currentBoss === "sovereign"
-          ? { x: state.sovereign.x, y: state.sovereign.y }
-          : state.currentBoss === "monarch"
-          ? { x: state.nullBoss.x, y: state.nullBoss.y }
-          : state.currentBoss === "cesium"
-          ? { x: state.cesium.x, y: state.cesium.y }
-          : state.currentBoss === "tantalum"
-          ? { x: state.tantalum.x, y: state.tantalum.y }
-          : { x: state.luminosity.x, y: state.luminosity.y };
-        const bossHitRadius = state.currentBoss === "architect" ? 58 : state.currentBoss === "sovereign" ? 66 : state.currentBoss === "monarch" ? 64 : state.currentBoss === "cesium" ? 68 : state.currentBoss === "tantalum" ? 72 : getLuminosityCoreRadius();
+        const bossTarget = getBossTargetState();
+        const bossPos = bossTarget.pos;
+        const bossHitRadius = bossTarget.radius;
         for (let i = state.playerShots.length - 1; i >= 0; i--) {
           const shot = state.playerShots[i];
           if (state.currentBoss === "cesium") {
@@ -8153,6 +8550,20 @@
               }
             }
             if (clippedBarrier) continue;
+          } else if (state.currentBoss === "sili") {
+            const siliUnits = getSiliUnitStates();
+            let hitSili = false;
+            for (const unit of [siliUnits.unitA, siliUnits.unitB]) {
+              const dist = Math.hypot(shot.x - unit.x, shot.y - unit.y);
+              if (dist < unit.size + shot.size + 2) {
+                damageBoss(shot.damage);
+                addSpark(shot.x, shot.y, unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)", 6, 120);
+                state.playerShots.splice(i, 1);
+                hitSili = true;
+                break;
+              }
+            }
+            if (hitSili) continue;
           }
           shot.x += shot.vx * dt;
           shot.y += shot.vy * dt;
@@ -8238,7 +8649,8 @@
 
           const dx = shot.x - bossPos.x;
           const dy = shot.y - bossPos.y;
-          if (dx * dx + dy * dy < bossHitRadius * bossHitRadius) {
+          const allowCentralHit = state.currentBoss !== "sili" || state.sili.phase === 4;
+          if (allowCentralHit && dx * dx + dy * dy < bossHitRadius * bossHitRadius) {
             if (state.currentBoss === "tantalum" && state.tantalum.flashTimer > 0 && state.tantalum.absorbShotsRemaining > 0) {
               state.tantalum.absorbShotsRemaining -= 1;
               state.tantalum.flashTimer = 0;
@@ -8254,6 +8666,54 @@
 
           if (shot.life <= 0 || shot.x < -40 || shot.x > width + 40 || shot.y < -40 || shot.y > height + 40) {
             state.playerShots.splice(i, 1);
+          }
+        }
+      }
+
+      function updateXlMissiles(dt) {
+        const bossTarget = getBossTargetState();
+        const bossPos = bossTarget.pos;
+        const bossHitRadius = bossTarget.radius;
+        for (let i = state.xlMissiles.length - 1; i >= 0; i--) {
+          const missile = state.xlMissiles[i];
+          const toBossX = bossPos.x - missile.x;
+          const toBossY = bossPos.y - missile.y;
+          const distance = Math.hypot(toBossX, toBossY) || 1;
+          const desiredVx = (toBossX / distance) * missile.maxSpeed;
+          const desiredVy = (toBossY / distance) * missile.maxSpeed;
+          const steer = Math.min(1, dt * missile.turnRate);
+          missile.vx += (desiredVx - missile.vx) * steer;
+          missile.vy += (desiredVy - missile.vy) * steer;
+          const speed = Math.hypot(missile.vx, missile.vy) || 1;
+          missile.vx = (missile.vx / speed) * missile.maxSpeed;
+          missile.vy = (missile.vy / speed) * missile.maxSpeed;
+          missile.x += missile.vx * dt;
+          missile.y += missile.vy * dt;
+          missile.life -= dt;
+          missile.trail.push({ x: missile.x, y: missile.y, life: 0.22 });
+          if (missile.trail.length > 8) missile.trail.shift();
+          for (const trail of missile.trail) {
+            trail.life -= dt;
+          }
+          missile.trail = missile.trail.filter((trail) => trail.life > 0);
+
+          if (distance <= bossHitRadius + missile.size) {
+            damageBoss(missile.damage, { awardCharge: false });
+            addFlash(missile.x, missile.y, missile.color.replace(/[\d.]+\)$/, "0.45)"), 80);
+            addSpark(missile.x, missile.y, missile.accent, 16, 180);
+            state.xlMissiles.splice(i, 1);
+            continue;
+          }
+
+          if (missile.life <= 0) {
+            addFlash(missile.x, missile.y, missile.color.replace(/[\d.]+\)$/, "0.25)"), 54);
+            addSpark(missile.x, missile.y, missile.color, 8, 100);
+            state.xlMissiles.splice(i, 1);
+            continue;
+          }
+
+          if (missile.x < -80 || missile.x > width + 80 || missile.y < -80 || missile.y > height + 80) {
+            state.xlMissiles.splice(i, 1);
           }
         }
       }
@@ -8353,9 +8813,10 @@
           return;
         }
 
-        state.score += dt * 100 * (0.4 + player.evolutionLevel * 0.22);
+        addScore(dt * 100 * (0.4 + player.evolutionLevel * 0.22));
         updateProfileStats();
         state.elapsed += dt * state.timeScale;
+        state.bossFightTimer += dt;
         state.bruteforceTimer = Math.max(0, state.bruteforceTimer - dt);
         state.fpsUnlockTimer = Math.max(0, state.fpsUnlockTimer - dt);
         state.macroBurstTimer = Math.max(0, state.macroBurstTimer - dt);
@@ -8383,16 +8844,10 @@
         updatePlayer(dt);
         const enemyTimeScale = state.fpsUnlockTimer > 0 ? 0.22 : state.rootOverrideTimer > 0 ? Math.min(state.timeScale, 0.52) : state.timeScale;
         if (state.currentBoss === "architect") {
-          const tutorialCombatLive = !state.tutorial.active || state.tutorial.step >= 5;
-          if (tutorialCombatLive) {
-            if (state.fpsUnlockTimer <= 0) {
-              const tutorialSpawnScale = state.tutorial.active ? 0.58 : 1;
-              updateSpawnLogic(dt * tutorialSpawnScale * (0.95 + player.evolutionLevel * 0.05));
-            }
-            updateBullets(dt * enemyTimeScale * (state.tutorial.active ? 0.82 : 1));
-          } else {
-            clearEnemyHazards();
+          if (state.fpsUnlockTimer <= 0) {
+            updateSpawnLogic(dt * (0.95 + player.evolutionLevel * 0.05));
           }
+          updateBullets(dt * enemyTimeScale);
         } else if (state.currentBoss === "sovereign") {
           if (state.fpsUnlockTimer <= 0) updateSovereignBoss(dt * enemyTimeScale);
         } else if (state.currentBoss === "monarch") {
@@ -8403,12 +8858,14 @@
           if (state.fpsUnlockTimer <= 0) updateTantalumBoss(dt * enemyTimeScale);
         } else if (state.currentBoss === "luminosity") {
           if (state.fpsUnlockTimer <= 0) updateLuminosityBoss(dt * enemyTimeScale);
+        } else if (state.currentBoss === "sili") {
+          if (state.fpsUnlockTimer <= 0) updateSiliBoss(dt * enemyTimeScale);
         }
         if (state.mode !== "playing") return;
         updatePlayerShots(dt);
+        updateXlMissiles(dt);
         updateSparks(dt);
         updateFlashes(dt);
-        updateTutorial(dt);
       }
 
       function drawBackground() {
@@ -8448,10 +8905,6 @@
       }
 
       function drawVortex() {
-        if (state.tutorial.active) {
-          drawTutorialBoss();
-          return;
-        }
         const visualTime = getVisualTime();
         const vortex = getVortexPosition();
         const x = vortex.x;
@@ -8519,108 +8972,6 @@
         ctx.restore();
       }
 
-      function drawTutorialBoss() {
-        const visualTime = getVisualTime();
-        const boss = getVortexPosition();
-        const x = boss.x;
-        const y = boss.y;
-        const pulse = 1 + Math.sin(visualTime * 3.8) * 0.08;
-
-        ctx.save();
-        ctx.translate(x, y);
-
-        const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, 150);
-        halo.addColorStop(0, "rgba(255, 255, 255, 0.14)");
-        halo.addColorStop(0.22, "rgba(72, 220, 255, 0.16)");
-        halo.addColorStop(0.58, "rgba(255, 176, 92, 0.1)");
-        halo.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = halo;
-        ctx.beginPath();
-        ctx.arc(0, 0, 150, 0, TAU);
-        ctx.fill();
-
-        ctx.save();
-        ctx.rotate(visualTime * 0.55);
-        for (let fin = 0; fin < 4; fin++) {
-          ctx.rotate(TAU / 4);
-          ctx.fillStyle = "rgba(32, 42, 58, 0.92)";
-          ctx.strokeStyle = "rgba(96, 226, 255, 0.45)";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(16, -16);
-          ctx.lineTo(74, -30);
-          ctx.lineTo(94, 0);
-          ctx.lineTo(74, 30);
-          ctx.lineTo(16, 16);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        ctx.save();
-        ctx.rotate(-visualTime * 0.9);
-        ctx.strokeStyle = "rgba(118, 235, 255, 0.34)";
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.arc(0, 0, 62, 0, TAU);
-        ctx.stroke();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = "rgba(255, 215, 106, 0.24)";
-        ctx.beginPath();
-        ctx.arc(0, 0, 88, 0, TAU);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.scale(pulse, pulse);
-        const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 48);
-        core.addColorStop(0, "rgba(255, 255, 255, 0.96)");
-        core.addColorStop(0.18, "rgba(255, 221, 140, 0.95)");
-        core.addColorStop(0.48, "rgba(108, 232, 255, 0.86)");
-        core.addColorStop(1, "rgba(108, 232, 255, 0)");
-        ctx.fillStyle = core;
-        ctx.beginPath();
-        ctx.arc(0, 0, 48, 0, TAU);
-        ctx.fill();
-
-        ctx.fillStyle = "rgba(24, 30, 44, 0.96)";
-        ctx.strokeStyle = "rgba(255, 215, 106, 0.6)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-34, -22);
-        ctx.lineTo(0, -38);
-        ctx.lineTo(34, -22);
-        ctx.lineTo(34, 22);
-        ctx.lineTo(0, 38);
-        ctx.lineTo(-34, 22);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.strokeStyle = "rgba(118, 235, 255, 0.72)";
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(-18, 0);
-        ctx.lineTo(18, 0);
-        ctx.moveTo(0, -18);
-        ctx.lineTo(0, 18);
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.globalCompositeOperation = "lighter";
-        for (let spark = 0; spark < 10; spark++) {
-          const angle = visualTime * 1.4 + (spark / 10) * TAU;
-          const radius = 84 + Math.sin(visualTime * 2.5 + spark) * 8;
-          ctx.fillStyle = spark % 2 === 0 ? "rgba(118, 235, 255, 0.8)" : "rgba(255, 215, 106, 0.72)";
-          ctx.beginPath();
-          ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, spark % 2 === 0 ? 3.6 : 2.6, 0, TAU);
-          ctx.fill();
-        }
-
-        ctx.restore();
-      }
-
       function drawBossDamageIndicator() {
         const alpha = clamp(state.bossDamageFlash / 0.16, 0, 1);
         if (alpha <= 0) return;
@@ -8635,6 +8986,7 @@
         else if (state.currentBoss === "cesium") drawCesiumBoss();
         else if (state.currentBoss === "tantalum") drawTantalumBoss();
         else if (state.currentBoss === "luminosity") drawLuminosityBoss();
+        else if (state.currentBoss === "sili") drawSiliBoss();
         ctx.restore();
       }
 
@@ -9065,6 +9417,7 @@
         else if (index === 3) drawCesiumPreview(targetCtx, time);
         else if (index === 4) drawTantalumPreview(targetCtx, time);
         else if (index === 5) drawLuminosityPreview(targetCtx, time);
+        else if (index === 6) drawSiliPreview(targetCtx, time);
       }
 
       function getMenuAmbientBossIndices() {
@@ -9111,7 +9464,8 @@
           2: 0.58,
           3: 0.52,
           4: 0.44,
-          5: 0.5
+          5: 0.5,
+          6: 0.5
         };
         const scale = (bossScaleMap[ambient.index] || 0.24) * (ambient.scale / 0.28);
 
@@ -9275,6 +9629,27 @@
           };
           drawLuminosityBoss();
           state.luminosity = previous;
+        } else if (ambient.index === 6) {
+          const previous = state.sili;
+          state.sili = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: 1,
+            orbitAngle: time * (1.5 + ambient.speedX) + ambient.seed,
+            orbitRadius: 76,
+            splitLerp: 0,
+            tetherPulse: 0.35,
+            cursors: [],
+            binaries: [],
+            beams: [],
+            sparks: [],
+            busLines: [],
+            fragments: [],
+            staticTrail: []
+          };
+          drawSiliBoss();
+          state.sili = previous;
         }
 
         ctx.restore();
@@ -10931,6 +11306,45 @@
         ctx.restore();
       }
 
+      function drawXlMissiles() {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (const missile of state.xlMissiles) {
+          for (const trail of missile.trail) {
+            const alpha = clamp(trail.life / 0.22, 0, 1) * 0.45;
+            ctx.fillStyle = missile.color.replace(/[\d.]+\)$/, `${alpha})`);
+            ctx.beginPath();
+            ctx.arc(trail.x, trail.y, missile.size * 0.75 * alpha + 2, 0, TAU);
+            ctx.fill();
+          }
+          const angle = Math.atan2(missile.vy, missile.vx);
+          const glow = ctx.createRadialGradient(missile.x, missile.y, 0, missile.x, missile.y, missile.size * 4.8);
+          glow.addColorStop(0, missile.accent);
+          glow.addColorStop(0.35, missile.color);
+          glow.addColorStop(1, missile.color.replace(/[\d.]+\)$/, "0)"));
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(missile.x, missile.y, missile.size * 4.8, 0, TAU);
+          ctx.fill();
+
+          ctx.save();
+          ctx.translate(missile.x, missile.y);
+          ctx.rotate(angle);
+          ctx.fillStyle = missile.accent;
+          ctx.beginPath();
+          ctx.moveTo(missile.size * 1.55, 0);
+          ctx.lineTo(-missile.size * 0.9, missile.size * 0.7);
+          ctx.lineTo(-missile.size * 0.45, 0);
+          ctx.lineTo(-missile.size * 0.9, -missile.size * 0.7);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = missile.color;
+          ctx.fillRect(-missile.size * 1.35, -missile.size * 0.28, missile.size * 1.15, missile.size * 0.56);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
       function drawPlayer() {
         const skin = getSkinColors();
         const glowRadius = 26 + player.evolutionLevel * 6 + player.nearMissCharge * 0.15;
@@ -11040,6 +11454,237 @@
         }
       }
 
+      function drawSiliBoss() {
+        const s = state.sili;
+        const units = getSiliUnitStates();
+        ctx.save();
+        if (units.tetherActive) {
+          const tetherGlow = ctx.createLinearGradient(units.unitA.x, units.unitA.y, units.unitB.x, units.unitB.y);
+          tetherGlow.addColorStop(0, `rgba(92, 232, 255, ${0.34 + s.tetherPulse * 0.32})`);
+          tetherGlow.addColorStop(0.5, `rgba(255, 255, 255, ${0.2 + s.tetherPulse * 0.26})`);
+          tetherGlow.addColorStop(1, `rgba(255, 90, 241, ${0.34 + s.tetherPulse * 0.32})`);
+          ctx.strokeStyle = tetherGlow;
+          ctx.lineWidth = 8 + s.tetherPulse * 8;
+          ctx.beginPath();
+          ctx.moveTo(units.unitA.x, units.unitA.y);
+          for (let i = 1; i <= 8; i++) {
+            const t = i / 8;
+            const baseX = units.unitA.x + (units.unitB.x - units.unitA.x) * t;
+            const baseY = units.unitA.y + (units.unitB.y - units.unitA.y) * t;
+            const jitter = (i % 2 === 0 ? 1 : -1) * (12 + s.tetherPulse * 8);
+            ctx.lineTo(baseX + Math.sin(state.elapsed * 9 + i) * jitter, baseY + Math.cos(state.elapsed * 7 + i) * jitter * 0.5);
+          }
+          ctx.stroke();
+        }
+
+        if (units.merged) {
+          const flicker = 0.8 + Math.sin(state.elapsed * 24) * 0.2;
+          const w = units.mergedWidth;
+          const h = units.mergedHeight;
+          const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 180);
+          glow.addColorStop(0, `rgba(255,255,255,${0.1 + flicker * 0.1})`);
+          glow.addColorStop(0.35, "rgba(92,232,255,0.16)");
+          glow.addColorStop(0.65, "rgba(255,90,241,0.16)");
+          glow.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = glow;
+          ctx.fillRect(s.x - 180, s.y - 180, 360, 360);
+          ctx.fillStyle = "rgba(26, 28, 38, 0.96)";
+          ctx.fillRect(s.x - w * 0.5, s.y - h * 0.5, w, h);
+          ctx.fillStyle = "rgba(92,232,255,0.82)";
+          ctx.fillRect(s.x - w * 0.5, s.y - h * 0.5, w * 0.5, h);
+          ctx.fillStyle = "rgba(255,90,241,0.82)";
+          ctx.fillRect(s.x, s.y - h * 0.5, w * 0.5, h);
+          for (let i = 0; i < 12; i++) {
+            const px = s.x - w * 0.5 + (i / 11) * w;
+            const py = s.y - h * 0.5 + Math.sin(state.elapsed * 10 + i * 0.8) * 3;
+            ctx.fillStyle = i % 2 === 0 ? "rgba(92,232,255,0.52)" : "rgba(255,90,241,0.52)";
+            ctx.fillRect(px - 4, py + 10, 8, h - 20);
+          }
+          ctx.strokeStyle = "rgba(255,255,255,0.42)";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(s.x - w * 0.5, s.y - h * 0.5, w, h);
+        } else {
+          for (const unit of [units.unitA, units.unitB]) {
+            const glow = ctx.createRadialGradient(unit.x, unit.y, 0, unit.x, unit.y, 86);
+            glow.addColorStop(0, "rgba(255,255,255,0.12)");
+            glow.addColorStop(0.35, unit.color === "#5ce8ff" ? "rgba(92,232,255,0.22)" : "rgba(255,90,241,0.22)");
+            glow.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = glow;
+            ctx.fillRect(unit.x - 86, unit.y - 86, 172, 172);
+            ctx.save();
+            ctx.translate(unit.x, unit.y);
+            ctx.rotate(state.elapsed * (unit.color === "#5ce8ff" ? 1.2 : -1.15));
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+              const angle = (i / 8) * TAU;
+              const radius = unit.size + (i % 2 === 0 ? 11 : 5);
+              const px = Math.cos(angle) * radius;
+              const py = Math.sin(angle) * radius;
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = "rgba(28, 30, 40, 0.96)";
+            ctx.fill();
+            ctx.strokeStyle = unit.color === "#5ce8ff" ? "rgba(164,245,255,0.78)" : "rgba(255,176,246,0.78)";
+            ctx.lineWidth = 2.6;
+            ctx.stroke();
+            ctx.fillStyle = "rgba(255,255,255,0.1)";
+            ctx.fillRect(-unit.size * 0.58, -unit.size * 0.58, unit.size * 1.16, unit.size * 1.16);
+            for (let i = 0; i < 4; i++) {
+              ctx.rotate(TAU / 4);
+              ctx.fillStyle = unit.color === "#5ce8ff" ? "rgba(92,232,255,0.78)" : "rgba(255,90,241,0.78)";
+              ctx.fillRect(unit.size * 0.62, -3, 12, 6);
+            }
+            ctx.restore();
+          }
+        }
+        ctx.restore();
+      }
+
+      function drawSiliProjectiles() {
+        const s = state.sili;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (const cursor of s.cursors) {
+          ctx.save();
+          ctx.translate(cursor.x, cursor.y);
+          ctx.shadowBlur = 16;
+          ctx.shadowColor = cursor.color;
+          ctx.fillStyle = cursor.color;
+          ctx.beginPath();
+          ctx.moveTo(-cursor.size * 0.45, -cursor.size * 0.5);
+          ctx.lineTo(cursor.size * 0.5, 0);
+          ctx.lineTo(-cursor.size * 0.12, cursor.size * 0.14);
+          ctx.lineTo(cursor.size * 0.18, cursor.size * 0.56);
+          ctx.lineTo(-cursor.size * 0.46, cursor.size * 0.2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        for (const bullet of s.binaries) {
+          if (bullet.delay > 0) continue;
+          ctx.fillStyle = bullet.color;
+          ctx.fillRect(bullet.x - bullet.size * 0.5, bullet.y - bullet.size * 0.5, bullet.size, bullet.size);
+        }
+        for (const spark of s.sparks) {
+          ctx.fillStyle = spark.color;
+          ctx.beginPath();
+          ctx.arc(spark.x, spark.y, spark.size, 0, TAU);
+          ctx.fill();
+        }
+        for (const beam of s.beams) {
+          const beamSegments = getSiliBeamSegments(beam);
+          for (const segment of beamSegments) {
+            const beamGradient = ctx.createLinearGradient(segment.x1, segment.y1, segment.x2, segment.y2);
+            beamGradient.addColorStop(0, beam.telegraph > 0 ? "rgba(92,232,255,0.28)" : "rgba(92,232,255,0.94)");
+            beamGradient.addColorStop(0.5, beam.telegraph > 0 ? "rgba(255,255,255,0.34)" : "rgba(255,255,255,0.98)");
+            beamGradient.addColorStop(1, beam.telegraph > 0 ? "rgba(255,90,241,0.28)" : "rgba(255,90,241,0.94)");
+            ctx.strokeStyle = beamGradient;
+            ctx.lineWidth = beam.telegraph > 0 ? 8 : 15;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(segment.x1, segment.y1);
+            ctx.lineTo(segment.x2, segment.y2);
+            ctx.stroke();
+            if (beam.telegraph <= 0) {
+              ctx.strokeStyle = "rgba(255,255,255,0.5)";
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.moveTo(segment.x1, segment.y1);
+              ctx.lineTo(segment.x2, segment.y2);
+              ctx.stroke();
+              for (let i = 0; i < 4; i++) {
+                const t = i / 3;
+                const px = lerp(segment.x1, segment.x2, t);
+                const py = lerp(segment.y1, segment.y2, t);
+                ctx.fillStyle = i % 2 === 0 ? "rgba(92,232,255,0.72)" : "rgba(255,90,241,0.72)";
+                ctx.fillRect(px - 5, py - 5, 10, 10);
+              }
+            }
+          }
+        }
+        for (const bus of s.busLines) {
+          ctx.fillStyle = "rgba(28, 32, 42, 0.96)";
+          ctx.fillRect(bus.x - bus.width * 0.5, bus.y - bus.height * 0.5, bus.width, bus.height);
+          ctx.fillStyle = "rgba(92,232,255,0.52)";
+          ctx.fillRect(bus.x - bus.width * 0.5, bus.y - bus.height * 0.5, 8, bus.height);
+          ctx.fillStyle = "rgba(255,90,241,0.52)";
+          ctx.fillRect(bus.x + bus.width * 0.5 - 8, bus.y - bus.height * 0.5, 8, bus.height);
+          ctx.fillStyle = "rgba(255,255,255,0.08)";
+          for (let i = 0; i < 6; i++) {
+            ctx.fillRect(bus.x - bus.width * 0.36 + i * (bus.width * 0.14), bus.y - 2, bus.width * 0.08, 4);
+          }
+        }
+        for (const cube of s.cubes) {
+          const glowAlpha = cube.telegraph > 0 ? 0.24 : 0.4;
+          ctx.save();
+          ctx.translate(cube.x, cube.y);
+          ctx.shadowBlur = cube.telegraph > 0 ? 18 : 28;
+          ctx.shadowColor = cube.color;
+          ctx.fillStyle = cube.telegraph > 0 ? "rgba(18, 22, 34, 0.45)" : "rgba(26, 30, 42, 0.94)";
+          ctx.fillRect(-cube.size * 0.5, -cube.size * 0.5, cube.size, cube.size);
+          ctx.strokeStyle = cube.color.replace("0.95", String(glowAlpha + 0.42));
+          ctx.lineWidth = cube.telegraph > 0 ? 4 : 6;
+          ctx.strokeRect(-cube.size * 0.5, -cube.size * 0.5, cube.size, cube.size);
+          for (let i = 0; i < 4; i++) {
+            const inset = 6 + i * 5;
+            ctx.strokeStyle = i % 2 === 0 ? "rgba(92,232,255,0.32)" : "rgba(255,90,241,0.32)";
+            ctx.strokeRect(-cube.size * 0.5 + inset, -cube.size * 0.5 + inset, cube.size - inset * 2, cube.size - inset * 2);
+          }
+          ctx.restore();
+        }
+        for (const fragment of s.fragments) {
+          ctx.fillStyle = fragment.color;
+          ctx.fillRect(fragment.x - fragment.size * 0.5, fragment.y - fragment.size * 0.5, fragment.size, fragment.size);
+        }
+        for (const trail of s.staticTrail) {
+          const alpha = clamp(trail.life / 0.8, 0, 1);
+          ctx.fillStyle = `rgba(210, 170, 255, ${alpha * 0.2})`;
+          ctx.fillRect(trail.x - trail.width * 0.5, trail.y - trail.height * 0.5, trail.width, trail.height);
+          ctx.fillStyle = `rgba(92,232,255, ${alpha * 0.2})`;
+          ctx.fillRect(trail.x - trail.width * 0.5, trail.y - trail.height * 0.5, 10, trail.height);
+          ctx.fillStyle = `rgba(255,90,241, ${alpha * 0.2})`;
+          ctx.fillRect(trail.x + trail.width * 0.5 - 10, trail.y - trail.height * 0.5, 10, trail.height);
+        }
+        ctx.restore();
+      }
+
+      function drawSiliPreview(ctxPreview, time) {
+        const cx = 64;
+        const cy = 64;
+        const ox = Math.cos(time * 1.6) * 24;
+        const oy = Math.sin(time * 1.6) * 14;
+        ctxPreview.strokeStyle = "rgba(214, 196, 255, 0.48)";
+        ctxPreview.lineWidth = 4;
+        ctxPreview.beginPath();
+        ctxPreview.moveTo(cx + ox, cy + oy);
+        ctxPreview.lineTo(cx - ox, cy - oy);
+        ctxPreview.stroke();
+        ctxPreview.fillStyle = "rgba(92,232,255,0.9)";
+        ctxPreview.fillRect(cx + ox - 18, cy + oy - 18, 36, 36);
+        ctxPreview.fillStyle = "rgba(255,90,241,0.9)";
+        ctxPreview.fillRect(cx - ox - 18, cy - oy - 18, 36, 36);
+      }
+
+      function drawSiliSigil(progress) {
+        const alpha = clamp(progress * 1.15, 0, 1);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(progress * 1.5);
+        ctx.strokeStyle = `rgba(214, 196, 255, ${0.18 + alpha * 0.42})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-140, 0);
+        ctx.lineTo(140, 0);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(92,232,255, ${0.28 + alpha * 0.42})`;
+        ctx.fillRect(-160, -42, 84, 84);
+        ctx.fillStyle = `rgba(255,90,241, ${0.28 + alpha * 0.42})`;
+        ctx.fillRect(76, -42, 84, 84);
+        ctx.restore();
+      }
+
       function drawChronoField() {
         const snapStrength = 1 - Math.min(state.chronoScale, 1);
         if (snapStrength <= 0.02) return;
@@ -11056,14 +11701,15 @@
 
       function drawHud() {
         const attackMeta = getAttackLoadoutMeta();
+        const xlMeta = xlBulletDefs[state.profile.shop?.selectedXlBullet || "twin_hunter"] || xlBulletDefs.twin_hunter;
         updateControlHint();
         scoreValue.textContent = String(Math.floor(state.score)).padStart(6, "0");
+        bossTimerValue.textContent = `Time ${formatRunTimer(state.bossFightTimer)}`;
+        bossTimerValue.style.display = state.profile.showBossTimer ? "block" : "none";
         chronoValue.textContent = `${Math.round(state.timeScale * 100)}%`;
         chronoFill.style.width = `${Math.round(clamp(state.timeScale / 2.2, 0, 1) * 100)}%`;
         const bossPercent = Math.round(clamp(state.bossHealth / Math.max(1, state.bossMaxHealth), 0, 1) * 100);
-        const bossLabel = state.tutorial.active && state.currentBoss === "architect"
-          ? getTutorialMinibossName()
-          : state.currentBoss === "sovereign"
+        const bossLabel = state.currentBoss === "sovereign"
           ? "Sovereign"
           : state.currentBoss === "monarch"
           ? "Monarch"
@@ -11073,6 +11719,8 @@
           ? "Capacitor"
           : state.currentBoss === "luminosity"
           ? "Luminosity"
+          : state.currentBoss === "sili"
+          ? "Sili"
           : "Architect";
         bossValue.textContent = `${bossLabel} P${state.bossPhase} - ${bossPercent}%`;
         bossFill.style.width = `${bossPercent}%`;
@@ -11085,6 +11733,8 @@
         const ultimateActive = state.rootOverrideTimer > 0 || state.macroBurstTimer > 0 || state.fpsUnlockTimer > 0 || state.bruteforceTimer > 0 ? " · ACTIVE" : "";
         ultimateValue.textContent = `${attackMeta.name} · ${Math.round(state.ultimateCharge)}%${ultimateActive}`;
         ultimateFill.style.width = `${Math.round(clamp(state.ultimateCharge / 100, 0, 1) * 100)}%`;
+        xlValue.textContent = `${xlMeta.name} · ${state.xlAmmo} Ready`;
+        xlFill.style.width = `${Math.round(clamp(state.xlChargeProgress / 1200, 0, 1) * 100)}%`;
       }
 
       function drawGlitch() {
@@ -11160,6 +11810,8 @@
           drawTantalumBoss();
         } else if (state.currentBoss === "luminosity" && ["playing", "paused", "gameover", "victory"].includes(state.mode)) {
           drawLuminosityBoss();
+        } else if (state.currentBoss === "sili" && ["playing", "paused", "gameover", "victory"].includes(state.mode)) {
+          drawSiliBoss();
         } else if (state.mode === "loading") {
           // Keep loading visuals isolated to the overlay shell.
         } else if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
@@ -11185,6 +11837,8 @@
             drawTantalumSigil(progress);
           } else if (state.currentBoss === "luminosity") {
             drawLuminositySigil(progress);
+          } else if (state.currentBoss === "sili") {
+            drawSiliSigil(progress);
           } else {
             drawArchitectSigil(progress);
           }
@@ -11399,6 +12053,15 @@
               ctx.fill();
               ctx.restore();
             }
+          } else if (state.victoryBoss === "sili") {
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            for (const fragment of state.sili.fragments) {
+              const alpha = clamp(fragment.life / 4, 0, 1);
+              ctx.fillStyle = fragment.color.replace(/[\d.]+\)$/, `${alpha})`);
+              ctx.fillRect(fragment.x - fragment.size * 0.5, fragment.y - fragment.size * 0.5, fragment.size, fragment.size);
+            }
+            ctx.restore();
           } else {
             drawArchitectSigil(0.8 + bloom * 0.7);
           }
@@ -11416,7 +12079,10 @@
             drawTantalumProjectiles();
           } else if (state.currentBoss === "luminosity") {
             drawLuminosityProjectiles();
+          } else if (state.currentBoss === "sili") {
+            drawSiliProjectiles();
           }
+          drawXlMissiles();
           drawPlayerShots();
           drawFlashes();
           drawSparks();
@@ -11458,13 +12124,23 @@
         input.mouseY = event.clientY;
         input.hasMouse = true;
       });
-      window.addEventListener("mousedown", () => {
+      window.addEventListener("mousedown", (event) => {
         if (state.mode === "gameover") {
           restartCurrentEncounter();
           return;
         }
         if (state.mode === "playing") {
-          useUltimate();
+          if (event.button === 0) {
+            useXlBullet();
+          } else if (event.button === 2) {
+            event.preventDefault();
+            useUltimate();
+          }
+        }
+      });
+      window.addEventListener("contextmenu", (event) => {
+        if (state.mode === "playing") {
+          event.preventDefault();
         }
       });
       window.addEventListener("mouseup", () => {
@@ -11493,34 +12169,12 @@
         if (event.target === lastHoverTarget) lastHoverTarget = null;
       });
       overlay.addEventListener("click", (event) => {
-        if (event.target.closest("[data-tutorial-continue]")) {
-          const resumeStep = state.tutorial.promptResumeStep;
-          state.tutorial.promptTitle = "";
-          state.tutorial.promptBody = [];
-          state.tutorial.promptResumeStep = null;
-          if (resumeStep === 5) {
-            beginTutorialCombat();
-          } else {
-            state.mode = "playing";
-            overlay.classList.remove("show");
-            updateHudVisibility();
-            if (resumeStep !== null) {
-              state.tutorial.step = resumeStep;
-            }
-          }
-          return;
-        }
-
         const nav = event.target.closest("[data-nav]");
         if (nav) {
           const destination = nav.dataset.nav;
-          if (isTutorialRequired() && destination !== "tutorial" && destination !== "menu") {
-            return;
-          }
           if (destination === "menu") renderMainMenu();
           if (destination === "operations") renderOperations();
           if (destination === "boss_select") renderBossSelect();
-          if (destination === "tutorial") startTutorial();
           if (destination === "config") renderConfig();
           if (destination === "achievements") renderAchievements();
           if (destination === "edit_attacks") renderEditAttacks();
@@ -11579,6 +12233,12 @@
           return;
         }
 
+        if (event.target.closest("[data-toggle-boss-timer]")) {
+          setShowBossTimer(!state.profile.showBossTimer);
+          renderConfig();
+          return;
+        }
+
         const controlRebind = event.target.closest("[data-control-rebind]");
         if (controlRebind) {
           state.controlRebindAction = controlRebind.dataset.controlRebind;
@@ -11623,9 +12283,23 @@
           return;
         }
 
+        const xlLoadout = event.target.closest("[data-xl-loadout]");
+        if (xlLoadout) {
+          setXlBulletLoadout(xlLoadout.dataset.xlLoadout);
+          renderEditAttacks();
+          return;
+        }
+
         const shopUltimate = event.target.closest("[data-shop-buy-ultimate]");
         if (shopUltimate) {
           purchaseUltimate(shopUltimate.dataset.shopBuyUltimate);
+          renderEditAttacks();
+          return;
+        }
+
+        const shopXl = event.target.closest("[data-shop-buy-xl]");
+        if (shopXl) {
+          purchaseXlBullet(shopXl.dataset.shopBuyXl);
           renderEditAttacks();
           return;
         }
@@ -11657,18 +12331,6 @@
         }
 
         if (event.target.closest("[data-pause-continue]")) {
-          if (state.tutorial.active && state.tutorial.step === 4 && player.damageUpgradeLevel >= 1) {
-            showTutorialPrompt(
-              "Training Miniboss Online",
-              [
-                `${getTutorialMinibossName()} is now live in the arena.`,
-                "Keep moving, keep shooting, and use your ultimate when the prompt appears. Defeat the core to unlock the full command menu."
-              ],
-              5,
-              "Start Fight"
-            );
-            return;
-          }
           togglePause();
           return;
         }
