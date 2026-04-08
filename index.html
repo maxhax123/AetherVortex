@@ -1801,11 +1801,12 @@
 
     @media (max-width: 760px) {
       .hud {
-        inset: auto 0 164px 0;
-        padding: 0 10px 0;
+        inset: 88px 8px auto 8px;
+        padding: 0;
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
         gap: 8px;
+        align-items: start;
       }
 
       .panel {
@@ -1813,14 +1814,49 @@
         max-width: none;
         width: 100%;
         padding: 10px 12px;
+        background: linear-gradient(180deg, rgba(12, 9, 20, 0.9), rgba(7, 5, 13, 0.76));
+      }
+
+      .hud .panel:first-child {
+        position: relative;
+        min-height: 100%;
+        padding-right: 58px;
+      }
+
+      .hud .panel:first-child .pause-toggle.inline {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+      }
+
+      .hud .panel:first-child .pause-toggle-bar {
+        width: 5px;
+        height: 16px;
+      }
+
+      .hud .panel:first-child > div[style*="margin-top: 8px"] {
+        display: none;
+      }
+
+      .hud .panel:last-child {
+        max-height: calc(var(--app-height, 100dvh) - 292px - env(safe-area-inset-bottom));
+        overflow: auto;
+        scrollbar-width: none;
+      }
+
+      .hud .panel:last-child::-webkit-scrollbar {
+        display: none;
       }
 
       .boss-hud {
-        top: 10px;
-        left: 10px;
+        top: 8px;
+        left: 8px;
         transform: none;
-        width: calc(100vw - 20px);
-        padding: 10px 12px 12px;
+        width: calc(100vw - 16px);
+        padding: 9px 12px 11px;
       }
 
       .boss-head {
@@ -1853,6 +1889,69 @@
 
       .value {
         font-size: 20px;
+      }
+
+      .mobile-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: end;
+        gap: 12px;
+        padding: 12px 10px calc(10px + env(safe-area-inset-bottom));
+        background: linear-gradient(180deg, rgba(5, 3, 10, 0), rgba(5, 3, 10, 0.18) 20%, rgba(5, 3, 10, 0.74));
+      }
+
+      .mobile-joystick {
+        width: min(35vw, 124px);
+        height: min(35vw, 124px);
+      }
+
+      .mobile-stick {
+        width: min(14vw, 52px);
+        height: min(14vw, 52px);
+      }
+
+      .mobile-action-pad {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .mobile-button {
+        min-height: 58px;
+        padding: 12px 10px;
+        border-radius: 18px;
+        font-size: 12px;
+      }
+
+      .mobile-button.mobile-ultimate {
+        min-height: 70px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hud {
+        grid-template-columns: 1fr;
+        inset: 82px 8px auto 8px;
+      }
+
+      .hud .panel:first-child {
+        padding-right: 56px;
+      }
+
+      .hud .panel:last-child {
+        max-height: calc(var(--app-height, 100dvh) - 366px - env(safe-area-inset-bottom));
+      }
+
+      .mobile-controls {
+        gap: 10px;
+      }
+
+      .mobile-joystick-wrap {
+        justify-items: start;
+      }
+
+      .mobile-action-pad {
+        grid-template-columns: repeat(2, minmax(0, 84px));
+        justify-content: end;
       }
     }
   </style>
@@ -2010,13 +2109,13 @@
           teaser: "A matte dark-brown fractal monarch now leans into your flight path, forcing the arena to tighten over time."
         },
         {
-          name: "The Cesium Jim-Dandy Superficial",
+          name: "Cesium",
           active: true,
           status: "ACTIVE",
           teaser: "A rugged dark-yellow slab ringed by five bright cesium cones. Expect violent magnet pulls, cursor lanes, and a chaotic final fracture."
         },
         {
-          name: "The Tantalum Capacitive Redundant / 73Ta-VI",
+          name: "Tantalum",
           active: true,
           status: "ACTIVE",
           teaser: "A matte slate-grey capacitor stack with neon-blue charge seams and violent buffer-panels. Expect static drag, absorb punishes, and arena-wide discharge."
@@ -2132,8 +2231,8 @@
         architect_down: { title: "Architect Down", desc: "Defeat the Architect of the Void." },
         sovereign_down: { title: "Sovereign Split", desc: "Defeat the Protium Sovereign." },
         monarch_down: { title: "Null Shattered", desc: "Defeat Monarch Null." },
-        cesium_down: { title: "Cesium Cracked", desc: "Defeat The Cesium Jim-Dandy Superficial." },
-        tantalum_down: { title: "Capacitor Collapsed", desc: "Defeat The Tantalum Capacitive Redundant / 73Ta-VI." },
+        cesium_down: { title: "Cesium Cracked", desc: "Defeat Cesium." },
+        tantalum_down: { title: "Capacitor Collapsed", desc: "Defeat Tantalum." },
         luminosity_down: { title: "Neon Extinguished", desc: "Defeat Lord Luminosity the Noble Neon." },
         arsenal_tuned: { title: "Arsenal Tuned", desc: "Purchase your first shop upgrade." },
         score_2500: { title: "Signal Ascendant", desc: "Reach a score of 2500." },
@@ -2461,6 +2560,7 @@
           player.pullVy = 0;
         }
         updateOverlayScrollMode();
+        updateHudVisibility();
       }
 
       function ensureAudio() {
@@ -3513,11 +3613,11 @@
       function updateHudVisibility() {
         const inGame = ["playing", "paused", "gameover"].includes(state.mode);
         const pauseEnabled = ["playing", "paused"].includes(state.mode);
-        hud.style.display = inGame ? "flex" : "none";
+        hud.style.display = inGame ? (window.innerWidth <= 760 ? "grid" : "flex") : "none";
         bossHud.style.display = inGame ? "block" : "none";
         pauseButton.style.display = pauseEnabled ? "inline-flex" : "none";
         pauseButton.classList.toggle("paused", state.mode === "paused");
-        mobileControls.style.display = isMobileClient && state.mode === "playing" ? "flex" : "none";
+        mobileControls.style.display = isMobileClient && state.mode === "playing" ? (window.innerWidth <= 760 ? "grid" : "flex") : "none";
         for (const button of mobileControls.querySelectorAll("[data-mobile-control='turn-left']")) {
           button.classList.toggle("active", input.mobileTurnLeft);
         }
@@ -5182,15 +5282,22 @@
         const fromRight = side === "right";
         const fromLeft = side === "left";
         const fromBottom = side === "bottom";
+        const spawnX = fromBottom ? 60 + Math.random() * (width - 120) : fromRight ? width + 36 : -36;
+        const spawnY = fromBottom ? height + 36 : 60 + Math.random() * (height - 120);
+        const dx = player.x - spawnX;
+        const dy = player.y - spawnY;
+        const distance = Math.hypot(dx, dy) || 1;
         state.cesium.cursors.push({
-          x: fromBottom ? 60 + Math.random() * (width - 120) : fromRight ? width + 36 : -36,
-          y: fromBottom ? height + 36 : 60 + Math.random() * (height - 120),
-          vx: fromBottom ? 0 : fromRight ? -speed : fromLeft ? speed : -speed,
-          vy: fromBottom ? -speed : 0,
+          x: spawnX,
+          y: spawnY,
+          vx: (dx / distance) * speed,
+          vy: (dy / distance) * speed,
           size: 14 + Math.random() * 4,
           life: 6,
           jitter,
-          phase: Math.random() * TAU
+          phase: Math.random() * TAU,
+          turnRate: 2.8 + Math.random() * 1.4,
+          speed
         });
       }
 
@@ -5289,6 +5396,8 @@
           addFlash(c.x, c.y, "rgba(255, 228, 118, 0.74)", 170 + nextPhase * 26);
           addSpark(c.x, c.y, "rgba(255, 235, 160, 0.96)", 32 + nextPhase * 10, 220 + nextPhase * 30);
         }
+        const coreRadius = 48 * getCesiumBossScale();
+        const territorialRadius = c.phase === 3 ? 260 : c.phase === 2 ? 235 : 210;
 
         c.rotation += dt * (2.3 + c.phase * 0.85);
         c.conePulse += dt * (2.2 + c.phase * 0.5);
@@ -5320,6 +5429,10 @@
           c.dashRecover -= dt;
         } else if (!c.dashActive) {
           c.dashCooldown -= dt;
+          const playerDistance = Math.hypot(player.x - c.x, player.y - c.y);
+          if (playerDistance < territorialRadius && c.dashCooldown > 0.18) {
+            c.dashCooldown = 0.18;
+          }
           if (c.dashCooldown <= 0) {
             c.dashTelegraph = c.phase === 3 ? 0.34 : c.phase === 2 ? 0.42 : 0.5;
             c.dashCooldown = 0;
@@ -5438,7 +5551,6 @@
           }
         }
 
-        const coreRadius = 48 * getCesiumBossScale();
         for (const cone of coneStates) {
           const dist = Math.hypot(player.x - cone.x, player.y - cone.y);
           nearest = Math.min(nearest, dist);
@@ -5459,15 +5571,22 @@
 
         for (let i = c.cursors.length - 1; i >= 0; i--) {
           const cursor = c.cursors[i];
+          const dx = player.x - cursor.x;
+          const dy = player.y - cursor.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const desiredVX = (dx / dist) * cursor.speed;
+          const desiredVY = (dy / dist) * cursor.speed;
+          cursor.vx += (desiredVX - cursor.vx) * Math.min(1, dt * cursor.turnRate);
+          cursor.vy += (desiredVY - cursor.vy) * Math.min(1, dt * cursor.turnRate);
           cursor.x += cursor.vx * dt;
           cursor.y += (cursor.jitter ? Math.sin(state.elapsed * 12 + cursor.phase + cursor.x * 0.02) * 34 : 0) * dt;
           cursor.life -= dt;
-          const dx = player.x - cursor.x;
-          const dy = player.y - cursor.y;
-          const dist = Math.hypot(dx, dy);
-          nearest = Math.min(nearest, dist);
-          if (dist < 100) closeCount++;
-          if (Math.abs(dx) < cursor.size * 1.15 && Math.abs(dy) < cursor.size * 1.35) {
+          const liveDx = player.x - cursor.x;
+          const liveDy = player.y - cursor.y;
+          const liveDist = Math.hypot(liveDx, liveDy);
+          nearest = Math.min(nearest, liveDist);
+          if (liveDist < 100) closeCount++;
+          if (Math.abs(liveDx) < cursor.size * 1.15 && Math.abs(liveDy) < cursor.size * 1.35) {
             damagePlayer(1, "impact");
           }
           if (cursor.life <= 0 || cursor.x < -80 || cursor.x > width + 80) {
@@ -5952,6 +6071,7 @@
           nearest = Math.min(nearest, ringNearest);
           closeCount += ringClose;
           if (ring.life <= 0 || halfSize <= 1 || left >= right || top >= bottom) {
+            burstTantalumCursorRing(ring);
             t.cursorRings.splice(i, 1);
           }
         }
@@ -6443,6 +6563,31 @@
         });
       }
 
+      function addCursorBurst(x, y, color = "rgba(160, 246, 255, 0.96)") {
+        addFlash(x, y, "rgba(160, 246, 255, 0.28)", 36);
+        addSpark(x, y, color, 9, 120);
+      }
+
+      function burstTantalumCursorRing(ring) {
+        const halfSize = Math.max(18, Math.min(width, height) * 0.5 - ring.inset);
+        if (halfSize <= 1) return;
+        const left = centerX - halfSize;
+        const right = centerX + halfSize;
+        const top = centerY - halfSize;
+        const bottom = centerY + halfSize;
+        const perimeterPoints = [
+          { x: centerX, y: top },
+          { x: centerX, y: bottom },
+          { x: left, y: centerY },
+          { x: right, y: centerY },
+          { x: left + halfSize * 0.28, y: top + halfSize * 0.12 },
+          { x: right - halfSize * 0.28, y: bottom - halfSize * 0.12 }
+        ];
+        for (const point of perimeterPoints) {
+          addCursorBurst(point.x, point.y);
+        }
+      }
+
       function triggerImpactFrame(kind, strength = 1) {
         const clampedStrength = clamp(strength, 0, 1.35);
         if (kind === "damage") {
@@ -6505,12 +6650,12 @@
           } else if (state.currentBoss === "cesium") {
             warningText.textContent =
               state.cutsceneTime > 1.65
-                ? "Containment 04 Splintering... Cesium Jim-Dandy Superficial Breaking Orbit."
+                ? "Containment 04 Splintering... Cesium Breaking Orbit."
                 : "Cesium Static Surging...";
           } else if (state.currentBoss === "tantalum") {
             warningText.textContent =
               state.cutsceneTime > 1.65
-                ? "Containment 05 Charging... Tantalum Capacitive Redundant / 73Ta-VI Coming Online."
+                ? "Containment 05 Charging... Tantalum Coming Online."
                 : "Capacitor Lattice Overclocking...";
           } else if (state.currentBoss === "luminosity") {
             warningText.textContent =
@@ -6547,7 +6692,7 @@
         state.luminosity.shards.length = 0;
         overlay.innerHTML = `
           <div class="warning-shell">
-            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Architect Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Jim-Dandy Superficial Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Capacitive Redundant Overloading. Charge Integrity Failing." : "Lord Luminosity Dimming. Noble Neon Structure Failing."}</div>
+            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Architect Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : "Lord Luminosity Dimming. Noble Neon Structure Failing."}</div>
           </div>
         `;
         overlay.classList.add("show");
@@ -6720,9 +6865,9 @@
           if (state.victoryBoss === "monarch" && state.victoryTime > 3.2) {
             victoryText.textContent = "Monarch Null Shattered. Brown Fracture Signature Erased.";
           } else if (state.victoryBoss === "cesium" && state.victoryTime > 3.2) {
-            victoryText.textContent = "Cesium Jim-Dandy Superficial Ruptured. Yellow Fragment Storm Dissipating.";
+            victoryText.textContent = "Cesium Ruptured. Yellow Fragment Storm Dissipating.";
           } else if (state.victoryBoss === "tantalum" && state.victoryTime > 3.2) {
-            victoryText.textContent = "Tantalum Capacitive Redundant Collapsed. Blue Charge Dead And Cold.";
+            victoryText.textContent = "Tantalum Collapsed. Blue Charge Dead And Cold.";
           } else if (state.victoryBoss === "luminosity" && state.victoryTime > 3.2) {
             victoryText.textContent = "Lord Luminosity Extinguished. Noble Neon Glow Gone Cold.";
           } else if (state.victoryBoss === "sovereign" && state.victoryTime > 3.2) {
@@ -6749,9 +6894,9 @@
               : state.victoryBoss === "monarch"
               ? "Monarch Null Shuddering. Shatter Cascade Imminent."
               : state.victoryBoss === "cesium"
-              ? "Cesium Jim-Dandy Superficial Cracking. Cone Detachment Imminent."
+              ? "Cesium Cracking. Cone Detachment Imminent."
               : state.victoryBoss === "tantalum"
-              ? "Tantalum Capacitive Redundant Surging White. Scrap Collapse Imminent."
+              ? "Tantalum Surging White. Scrap Collapse Imminent."
               : "Lord Luminosity Flickering Scarlet. Neon Failure Imminent.";
           }
           const fadeStart = 5.6;
