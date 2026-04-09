@@ -701,9 +701,16 @@
       position: relative;
       width: 128px;
       height: 128px;
+      flex: 0 0 128px;
       display: block;
+      margin: 0 auto;
       overflow: hidden;
-      filter: drop-shadow(0 0 18px rgba(255, 215, 106, 0.12));
+      filter: none;
+    }
+
+    .boss-icon > .boss-preview {
+      align-self: center;
+      justify-self: center;
     }
 
     .boss-preview-svg {
@@ -716,6 +723,7 @@
       width: 128px;
       height: 128px;
       display: block;
+      image-rendering: auto;
     }
 
     .boss-preview-svg .preview-spin-slow,
@@ -4333,7 +4341,7 @@
       }
 
       function getBossPreviewMarkup(index, animated = false) {
-        if (index <= 5) {
+        if (index <= 8) {
           return `<div class="boss-preview ${animated ? "animated" : ""}"><canvas class="boss-preview-canvas" width="128" height="128" data-boss-preview="${index}" data-boss-animated="${animated ? "true" : "false"}"></canvas></div>`;
         }
         return `<div class="fractal-glyph"></div>`;
@@ -6399,12 +6407,15 @@
         if (c.dashActive) {
           const toTargetX = c.dashTargetX - c.x;
           const toTargetY = c.dashTargetY - c.y;
-          const targetDistance = Math.hypot(toTargetX, toTargetY);
+          const targetDistance = Math.hypot(toTargetX, toTargetY) || 1;
+          const dashDirX = toTargetX / targetDistance;
+          const dashDirY = toTargetY / targetDistance;
           c.dashSpeed = Math.min(c.phase === 3 ? 1250 : 1120, c.dashSpeed + dt * (c.phase === 3 ? 2300 : 1900));
           const stepDistance = c.dashSpeed * dt;
-          if (targetDistance <= stepDistance + 8 || c.dashTime <= 0) {
-            c.x = clamp(c.dashTargetX, minX, maxX);
-            c.y = clamp(c.dashTargetY, minY, height - 54);
+          const moveDistance = Math.min(stepDistance, targetDistance);
+          c.x = clamp(c.x + dashDirX * moveDistance, minX, maxX);
+          c.y = clamp(c.y + dashDirY * moveDistance, minY, height - 54);
+          if (targetDistance <= 10 || c.dashTime <= 0) {
             c.dashActive = false;
             c.dashVX = 0;
             c.dashVY = 0;
@@ -6416,8 +6427,8 @@
             addFlash(c.x, c.y, "rgba(255, 218, 104, 0.46)", 110 + c.phase * 16);
             addSpark(c.x, c.y, "rgba(255, 239, 152, 0.94)", 10 + c.phase * 4, 170 + c.phase * 24);
           } else {
-            c.x = clamp(c.x + c.dashVX * stepDistance, minX, maxX);
-            c.y = clamp(c.y + c.dashVY * stepDistance, minY, height - 54);
+            c.dashVX = dashDirX;
+            c.dashVY = dashDirY;
             state.shake = Math.max(state.shake, 14 + c.phase * 5);
           }
           c.dashTime -= dt;
@@ -10877,6 +10888,51 @@
         ctxPreview.fill();
       }
 
+      function drawSiliPreview(ctxPreview, time) {
+        const cx = 64;
+        const cy = 64;
+        const orbitX = Math.cos(time * 1.45) * 24;
+        const orbitY = Math.sin(time * 1.45) * 13;
+        const unitSize = 22;
+
+        ctxPreview.save();
+        ctxPreview.globalCompositeOperation = "lighter";
+        const tether = ctxPreview.createLinearGradient(cx + orbitX, cy + orbitY, cx - orbitX, cy - orbitY);
+        tether.addColorStop(0, "rgba(92,232,255,0.88)");
+        tether.addColorStop(0.5, "rgba(226,214,255,0.74)");
+        tether.addColorStop(1, "rgba(255,90,241,0.88)");
+        ctxPreview.strokeStyle = tether;
+        ctxPreview.lineWidth = 5;
+        ctxPreview.beginPath();
+        ctxPreview.moveTo(cx + orbitX, cy + orbitY);
+        ctxPreview.lineTo(cx - orbitX, cy - orbitY);
+        ctxPreview.stroke();
+
+        for (let shell = 0; shell < 2; shell++) {
+          const size = 15 + shell * 8;
+          ctxPreview.strokeStyle = shell === 0 ? "rgba(92,232,255,0.32)" : "rgba(255,90,241,0.32)";
+          ctxPreview.lineWidth = 1.6;
+          ctxPreview.strokeRect(cx + orbitX - size * 0.5, cy + orbitY - size * 0.5, size, size);
+          ctxPreview.strokeRect(cx - orbitX - size * 0.5, cy - orbitY - size * 0.5, size, size);
+        }
+
+        ctxPreview.fillStyle = "rgba(24,30,42,0.96)";
+        ctxPreview.fillRect(cx + orbitX - unitSize * 0.5, cy + orbitY - unitSize * 0.5, unitSize, unitSize);
+        ctxPreview.fillRect(cx - orbitX - unitSize * 0.5, cy - orbitY - unitSize * 0.5, unitSize, unitSize);
+
+        ctxPreview.strokeStyle = "rgba(92,232,255,0.96)";
+        ctxPreview.lineWidth = 3;
+        ctxPreview.strokeRect(cx + orbitX - unitSize * 0.5, cy + orbitY - unitSize * 0.5, unitSize, unitSize);
+        ctxPreview.strokeStyle = "rgba(255,90,241,0.96)";
+        ctxPreview.strokeRect(cx - orbitX - unitSize * 0.5, cy - orbitY - unitSize * 0.5, unitSize, unitSize);
+
+        ctxPreview.fillStyle = "rgba(92,232,255,0.28)";
+        ctxPreview.fillRect(cx + orbitX - 4, cy + orbitY - unitSize * 0.5, 8, unitSize);
+        ctxPreview.fillStyle = "rgba(255,90,241,0.28)";
+        ctxPreview.fillRect(cx - orbitX - 4, cy - orbitY - unitSize * 0.5, 8, unitSize);
+        ctxPreview.restore();
+      }
+
       function drawBossPreviewByIndex(index, targetCtx, time) {
         if (index === 0) drawArchitectPreview(targetCtx, time);
         else if (index === 1) drawSovereignPreview(targetCtx, time);
@@ -11204,8 +11260,27 @@
         ctx.restore();
       }
 
+      function normalizeBossPreviewCanvasParents() {
+        if (state.mode !== "boss_select") return;
+        const previewCanvases = overlay.querySelectorAll(".boss-preview-canvas[data-boss-preview]");
+        for (const canvasEl of previewCanvases) {
+          const bossIcon = canvasEl.closest(".boss-icon");
+          if (!bossIcon) continue;
+          let previewWrapper = bossIcon.querySelector(".boss-preview");
+          if (!previewWrapper) {
+            previewWrapper = document.createElement("div");
+            previewWrapper.className = "boss-preview";
+            bossIcon.appendChild(previewWrapper);
+          }
+          if (canvasEl.parentElement !== previewWrapper) {
+            previewWrapper.appendChild(canvasEl);
+          }
+        }
+      }
+
       function renderBossSelectPreviews() {
         if (state.mode !== "boss_select") return;
+        normalizeBossPreviewCanvasParents();
         const canvases = overlay.querySelectorAll("[data-boss-preview]");
         for (const canvasEl of canvases) {
           const previewIndex = Number(canvasEl.dataset.bossPreview);
@@ -12245,73 +12320,44 @@
         ctx.save();
         ctx.translate(t.x, t.y);
         ctx.rotate(t.rotation);
-        const bodyW = 152 * scale;
-        const bodyH = (t.phase === 3 ? 138 : 116) * scale;
-        const topFace = [
-          [-bodyW * 0.42, -bodyH * 0.44],
-          [bodyW * 0.22, -bodyH * 0.58],
-          [bodyW * 0.46, -bodyH * 0.26],
-          [-bodyW * 0.2, -bodyH * 0.12]
-        ];
-        const sideFace = [
-          [bodyW * 0.22, -bodyH * 0.58],
-          [bodyW * 0.48, -bodyH * 0.3],
-          [bodyW * 0.48, bodyH * 0.36],
-          [bodyW * 0.22, bodyH * 0.12]
-        ];
-        const frontFace = [
-          [-bodyW * 0.42, -bodyH * 0.12],
-          [bodyW * 0.22, -bodyH * 0.26],
-          [bodyW * 0.22, bodyH * 0.44],
-          [-bodyW * 0.42, bodyH * 0.58]
-        ];
-        const matte = ctx.createLinearGradient(-bodyW * 0.5, -bodyH * 0.5, bodyW * 0.5, bodyH * 0.5);
-        matte.addColorStop(0, victoryOverload || t.flashTimer > 0 ? "rgba(246, 252, 255, 0.98)" : "rgba(90, 100, 114, 0.98)");
-        matte.addColorStop(1, victoryOverload || t.flashTimer > 0 ? "rgba(202, 238, 255, 0.84)" : "rgba(38, 46, 58, 0.98)");
-        const frontGradient = ctx.createLinearGradient(-bodyW * 0.42, -bodyH * 0.2, bodyW * 0.22, bodyH * 0.5);
-        frontGradient.addColorStop(0, victoryOverload || t.flashTimer > 0 ? "rgba(250,254,255,0.98)" : "rgba(100,112,126,0.98)");
-        frontGradient.addColorStop(0.58, victoryOverload || t.flashTimer > 0 ? "rgba(226,246,255,0.92)" : "rgba(54,64,76,0.98)");
-        frontGradient.addColorStop(1, victoryOverload || t.flashTimer > 0 ? "rgba(194,236,255,0.78)" : "rgba(28,36,46,0.98)");
-        const sideGradient = ctx.createLinearGradient(bodyW * 0.18, -bodyH * 0.52, bodyW * 0.5, bodyH * 0.4);
-        sideGradient.addColorStop(0, victoryOverload || t.flashTimer > 0 ? "rgba(232,248,255,0.9)" : "rgba(58,68,82,0.98)");
-        sideGradient.addColorStop(1, victoryOverload || t.flashTimer > 0 ? "rgba(196,234,255,0.72)" : "rgba(18,26,36,0.98)");
-        ctx.fillStyle = matte;
-        ctx.beginPath();
-        ctx.moveTo(topFace[0][0], topFace[0][1]);
-        for (const point of topFace.slice(1)) ctx.lineTo(point[0], point[1]);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = sideGradient;
-        ctx.beginPath();
-        ctx.moveTo(sideFace[0][0], sideFace[0][1]);
-        for (const point of sideFace.slice(1)) ctx.lineTo(point[0], point[1]);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = frontGradient;
-        ctx.beginPath();
-        ctx.moveTo(frontFace[0][0], frontFace[0][1]);
-        for (const point of frontFace.slice(1)) ctx.lineTo(point[0], point[1]);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = "rgba(164, 236, 255, 0.18)";
-        ctx.lineWidth = 2.2;
-        for (const shape of [topFace, sideFace, frontFace]) {
-          ctx.beginPath();
-          ctx.moveTo(shape[0][0], shape[0][1]);
-          for (const point of shape.slice(1)) ctx.lineTo(point[0], point[1]);
-          ctx.closePath();
-          ctx.stroke();
+        const bodyW = 138 * scale;
+        const bodyH = (t.phase === 3 ? 136 : 108) * scale;
+        const outerGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(bodyW, bodyH) * 0.92);
+        outerGlow.addColorStop(0, victoryOverload || t.flashTimer > 0 ? "rgba(232,250,255,0.34)" : "rgba(112,242,255,0.2)");
+        outerGlow.addColorStop(0.55, "rgba(96,228,255,0.1)");
+        outerGlow.addColorStop(1, "rgba(96,228,255,0)");
+        ctx.fillStyle = outerGlow;
+        ctx.fillRect(-bodyW * 0.62, -bodyH * 0.62, bodyW * 1.24, bodyH * 1.24);
+
+        for (let layer = 0; layer < 3; layer++) {
+          const insetX = layer * 13 * scale;
+          const insetY = layer * 16 * scale;
+          const layerW = bodyW - insetX * 2;
+          const layerH = bodyH - insetY * 2;
+          const bodyGradient = ctx.createLinearGradient(-layerW * 0.5, -layerH * 0.5, layerW * 0.5, layerH * 0.5);
+          bodyGradient.addColorStop(0, victoryOverload || t.flashTimer > 0 ? "rgba(246,252,255,0.98)" : `rgba(${96 - layer * 8}, ${108 - layer * 10}, ${124 - layer * 12}, 0.98)`);
+          bodyGradient.addColorStop(0.55, victoryOverload || t.flashTimer > 0 ? "rgba(220,244,255,0.9)" : `rgba(${54 - layer * 6}, ${66 - layer * 7}, ${82 - layer * 8}, 0.98)`);
+          bodyGradient.addColorStop(1, victoryOverload || t.flashTimer > 0 ? "rgba(192,234,255,0.72)" : `rgba(${26 - layer * 4}, ${34 - layer * 4}, ${46 - layer * 4}, 0.98)`);
+          ctx.fillStyle = bodyGradient;
+          ctx.fillRect(-layerW * 0.5, -layerH * 0.5, layerW, layerH);
+          ctx.strokeStyle = layer === 0 ? "rgba(166,240,255,0.28)" : "rgba(214,248,255,0.12)";
+          ctx.lineWidth = layer === 0 ? 2.4 : 1.4;
+          ctx.strokeRect(-layerW * 0.5, -layerH * 0.5, layerW, layerH);
         }
-        ctx.strokeStyle = "rgba(218, 248, 255, 0.14)";
-        ctx.lineWidth = 1.2;
+
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = "rgba(112,242,255,0.2)";
+        ctx.fillRect(-bodyW * 0.09, -bodyH * 0.42, bodyW * 0.18, bodyH * 0.84);
+        ctx.fillStyle = "rgba(226,252,255,0.18)";
+        ctx.fillRect(-bodyW * 0.33, -bodyH * 0.08, bodyW * 0.66, bodyH * 0.16);
         for (let seam = -1; seam <= 1; seam++) {
+          ctx.strokeStyle = "rgba(126,244,255,0.5)";
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(-bodyW * 0.34, seam * 22 - bodyH * 0.04);
-          ctx.lineTo(bodyW * 0.14, seam * 18 - bodyH * 0.14);
+          ctx.moveTo(-bodyW * 0.36, seam * bodyH * 0.18);
+          ctx.lineTo(bodyW * 0.36, seam * bodyH * 0.18);
           ctx.stroke();
         }
-        ctx.fillStyle = "rgba(112,242,255,0.12)";
-        ctx.fillRect(-bodyW * 0.1, -bodyH * 0.42, bodyW * 0.18, bodyH * 0.84);
         ctx.restore();
 
         for (let plateIndex = 0; plateIndex < plates.length; plateIndex++) {
@@ -13218,23 +13264,6 @@
         ctx.restore();
       }
 
-      function drawSiliPreview(ctxPreview, time) {
-        const cx = 64;
-        const cy = 64;
-        const ox = Math.cos(time * 1.6) * 24;
-        const oy = Math.sin(time * 1.6) * 14;
-        ctxPreview.strokeStyle = "rgba(214, 196, 255, 0.48)";
-        ctxPreview.lineWidth = 4;
-        ctxPreview.beginPath();
-        ctxPreview.moveTo(cx + ox, cy + oy);
-        ctxPreview.lineTo(cx - ox, cy - oy);
-        ctxPreview.stroke();
-        ctxPreview.fillStyle = "rgba(92,232,255,0.9)";
-        ctxPreview.fillRect(cx + ox - 18, cy + oy - 18, 36, 36);
-        ctxPreview.fillStyle = "rgba(255,90,241,0.9)";
-        ctxPreview.fillRect(cx - ox - 18, cy - oy - 18, 36, 36);
-      }
-
       function drawSiliSigil(progress) {
         const alpha = clamp(progress * 1.15, 0, 1);
         ctx.save();
@@ -13514,50 +13543,60 @@
       function drawCaesarPreview(ctxPreview, time) {
         const cx = 64;
         const cy = 64;
+        const rotation = time * 0.34;
+        const coreRadius = 24;
+        const railRadius = 34;
+
         const glow = ctxPreview.createRadialGradient(cx, cy, 0, cx, cy, 74);
-        glow.addColorStop(0, "rgba(210,255,220,0.14)");
-        glow.addColorStop(0.42, "rgba(120,255,164,0.18)");
+        glow.addColorStop(0, "rgba(236,255,242,0.18)");
+        glow.addColorStop(0.35, "rgba(140,255,180,0.18)");
         glow.addColorStop(1, "rgba(0,0,0,0)");
         ctxPreview.fillStyle = glow;
         ctxPreview.beginPath();
         ctxPreview.arc(cx, cy, 74, 0, TAU);
         ctxPreview.fill();
+
         ctxPreview.save();
         ctxPreview.translate(cx, cy);
-        ctxPreview.rotate(time * 0.26);
+        ctxPreview.rotate(rotation * 0.35);
         ctxPreview.beginPath();
         for (let i = 0; i < 6; i++) {
           const angle = (i / 6) * TAU - Math.PI * 0.5;
-          const radius = i % 2 === 0 ? 34 : 30;
+          const radius = i % 2 === 0 ? coreRadius : coreRadius * 0.9;
           const px = Math.cos(angle) * radius;
           const py = Math.sin(angle) * radius;
           if (i === 0) ctxPreview.moveTo(px, py);
           else ctxPreview.lineTo(px, py);
         }
         ctxPreview.closePath();
-        const metal = ctxPreview.createLinearGradient(-40, -40, 40, 40);
-        metal.addColorStop(0, "rgba(236,242,248,0.98)");
-        metal.addColorStop(0.45, "rgba(176,184,194,0.96)");
-        metal.addColorStop(1, "rgba(98,108,118,0.96)");
+        const metal = ctxPreview.createLinearGradient(-28, -28, 28, 28);
+        metal.addColorStop(0, "rgba(240,244,248,0.98)");
+        metal.addColorStop(0.4, "rgba(176,184,192,0.96)");
+        metal.addColorStop(1, "rgba(84,92,102,0.96)");
         ctxPreview.fillStyle = metal;
         ctxPreview.fill();
-        ctxPreview.strokeStyle = "rgba(120,255,164,0.52)";
-        ctxPreview.lineWidth = 2;
+        ctxPreview.strokeStyle = "rgba(160,255,188,0.58)";
+        ctxPreview.lineWidth = 1.8;
         ctxPreview.stroke();
         ctxPreview.fillStyle = "rgba(160,255,188,0.2)";
-        ctxPreview.fillRect(-10, -28, 20, 56);
+        ctxPreview.fillRect(-5, -16, 10, 32);
         ctxPreview.restore();
+
         for (let i = 0; i < 6; i++) {
-          const angle = time * 0.72 + (i / 6) * TAU;
-          const rx = cx + Math.cos(angle) * 48;
-          const ry = cy + Math.sin(angle) * 48;
+          const angle = rotation + (i / 6) * TAU;
+          const rx = cx + Math.cos(angle) * railRadius;
+          const ry = cy + Math.sin(angle) * railRadius;
           ctxPreview.save();
           ctxPreview.translate(rx, ry);
           ctxPreview.rotate(angle);
-          ctxPreview.fillStyle = "rgba(190,198,206,0.98)";
-          ctxPreview.fillRect(-24, -6, 48, 12);
-          ctxPreview.fillStyle = "rgba(140,255,180,0.68)";
-          ctxPreview.fillRect(-11, -2, 22, 4);
+          const railMetal = ctxPreview.createLinearGradient(-20, 0, 20, 0);
+          railMetal.addColorStop(0, "rgba(210,218,226,0.98)");
+          railMetal.addColorStop(0.5, "rgba(118,126,136,0.96)");
+          railMetal.addColorStop(1, "rgba(210,218,226,0.98)");
+          ctxPreview.fillStyle = railMetal;
+          ctxPreview.fillRect(-19, -5, 38, 10);
+          ctxPreview.fillStyle = "rgba(140,255,180,0.72)";
+          ctxPreview.fillRect(-9, -1.5, 18, 3);
           ctxPreview.restore();
         }
       }
@@ -13788,17 +13827,51 @@
         const x = 64;
         const y = 64;
         const colors = ["rgba(255,150,214,0.92)", "rgba(118,214,255,0.88)", "rgba(255,220,132,0.84)", "rgba(208,166,255,0.84)"];
+
+        const aura = ctxPreview.createRadialGradient(x, y, 0, x, y, 70);
+        aura.addColorStop(0, "rgba(255,255,255,0.14)");
+        aura.addColorStop(0.36, "rgba(214,206,255,0.14)");
+        aura.addColorStop(1, "rgba(0,0,0,0)");
+        ctxPreview.fillStyle = aura;
+        ctxPreview.beginPath();
+        ctxPreview.arc(x, y, 70, 0, TAU);
+        ctxPreview.fill();
+
         ctxPreview.save();
         ctxPreview.translate(x, y);
+        ctxPreview.globalCompositeOperation = "lighter";
+        for (let ray = 0; ray < 8; ray++) {
+          const angle = (ray / 8) * TAU + time * 0.24;
+          ctxPreview.strokeStyle = ray % 2 === 0 ? "rgba(255,192,234,0.14)" : "rgba(132,224,255,0.14)";
+          ctxPreview.lineWidth = 1.6;
+          ctxPreview.beginPath();
+          ctxPreview.moveTo(Math.cos(angle) * 18, Math.sin(angle) * 18);
+          ctxPreview.lineTo(Math.cos(angle) * 46, Math.sin(angle) * 46);
+          ctxPreview.stroke();
+        }
         for (let i = 0; i < 6; i++) {
-          const size = 64 - i * 10;
+          const size = 58 - i * 8;
+          const hole = size * (0.5 + i * 0.02);
           ctxPreview.save();
-          ctxPreview.rotate(time * (0.2 + i * 0.05));
+          ctxPreview.rotate(time * (0.18 + i * 0.06));
           ctxPreview.strokeStyle = colors[i % colors.length];
-          ctxPreview.lineWidth = 2;
+          ctxPreview.lineWidth = 2.1 - i * 0.12;
           ctxPreview.strokeRect(-size * 0.5, -size * 0.5, size, size);
+          ctxPreview.strokeStyle = "rgba(255,255,255,0.11)";
+          ctxPreview.lineWidth = 0.9;
+          ctxPreview.strokeRect(-hole * 0.5, -hole * 0.5, hole, hole);
           ctxPreview.restore();
         }
+        const core = ctxPreview.createRadialGradient(0, 0, 0, 0, 0, 18);
+        core.addColorStop(0, "rgba(255,255,255,0.18)");
+        core.addColorStop(0.3, "rgba(194,182,255,0.24)");
+        core.addColorStop(0.72, "rgba(8,10,16,0.82)");
+        core.addColorStop(1, "rgba(0,0,0,0.96)");
+        ctxPreview.fillStyle = core;
+        ctxPreview.fillRect(-12, -12, 24, 24);
+        ctxPreview.strokeStyle = "rgba(255,255,255,0.24)";
+        ctxPreview.lineWidth = 1.6;
+        ctxPreview.strokeRect(-11, -11, 22, 22);
         ctxPreview.restore();
       }
 
