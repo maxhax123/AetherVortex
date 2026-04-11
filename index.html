@@ -892,6 +892,7 @@
       color: rgba(255, 60, 60, 0.82);
       font-size: 92px;
       font-weight: bold;
+      transform: translateY(10px);
       text-shadow: 0 0 24px rgba(255, 0, 0, 0.24);
       pointer-events: none;
     }
@@ -4415,7 +4416,7 @@
       }
 
       function getBossPreviewMarkup(index, animated = false) {
-        if (index <= 8) {
+        if (index <= 10) {
           return `<div class="boss-preview ${animated ? "animated" : ""}"><canvas class="boss-preview-canvas" width="128" height="128" data-boss-preview="${index}" data-boss-animated="${animated ? "true" : "false"}"></canvas></div>`;
         }
         return `<div class="fractal-glyph"></div>`;
@@ -10761,7 +10762,6 @@
       }
 
       function drawBossDamageIndicator() {
-        if (state.currentBoss === "alarmist") return;
         const alpha = clamp(state.bossDamageFlash / 0.16, 0, 1);
         if (alpha <= 0) return;
 
@@ -15737,6 +15737,7 @@
 
       function render() {
         renderBossSelectPreviews();
+        ctx.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
         ctx.save();
         if (state.settings.screenShake && state.shake > 0) {
           ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
@@ -16101,6 +16102,7 @@
           drawPlayer();
         }
         ctx.restore();
+        ctx.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
         drawImpactFrames();
         if (state.ultimateFlash > 0) {
           ctx.fillStyle = `rgba(255, 255, 255, ${state.ultimateFlash * 2.4})`;
