@@ -3061,6 +3061,9 @@
       let boss3Music = null;
       let boss7Music = null;
       let achievementSound = null;
+      let alarmistPingSound = null;
+      let shockwaveSounds = [];
+      let temporalStrainDeadSound = null;
       let currentMusicTarget = null;
       let loadingAssets = [];
 
@@ -3130,12 +3133,35 @@
           achievementSound.loop = false;
           achievementSound.preload = "auto";
         }
+        if (!alarmistPingSound) {
+          alarmistPingSound = new Audio("Alarmist-Am Ping.m4a");
+          alarmistPingSound.loop = false;
+          alarmistPingSound.preload = "auto";
+        }
+        if (!temporalStrainDeadSound) {
+          temporalStrainDeadSound = new Audio("TemporalStrainDEAD.m4a");
+          temporalStrainDeadSound.loop = false;
+          temporalStrainDeadSound.preload = "auto";
+        }
+        if (!shockwaveSounds.length) {
+          shockwaveSounds = ["Shockwave1.m4a", "Shockwave2.m4a", "Shockwave3.m4a"].map((file) => {
+            const audio = new Audio(file);
+            audio.loop = false;
+            audio.preload = "auto";
+            return audio;
+          });
+        }
         menuMusic.volume = getMenuMusicVolume();
         boss1Music.volume = getBossMusicVolume();
         boss2Music.volume = getBossMusicVolume();
         boss3Music.volume = getBossMusicVolume();
         boss7Music.volume = getBossMusicVolume();
         achievementSound.volume = state.settings.volume;
+        alarmistPingSound.volume = state.settings.volume;
+        temporalStrainDeadSound.volume = state.settings.volume;
+        for (const shockwaveSound of shockwaveSounds) {
+          shockwaveSound.volume = state.settings.volume;
+        }
       }
 
       function refreshLoadingState() {
@@ -3213,6 +3239,9 @@
         trackAudioLoad("Monarch Track", boss3Music);
         trackAudioLoad("Sili Track", boss7Music);
         trackAudioLoad("Achievement Cue", achievementSound);
+        trackAudioLoad("Alarmist Ping", alarmistPingSound);
+        trackAudioLoad("Temporal Strain Dead", temporalStrainDeadSound);
+        shockwaveSounds.forEach((audio, index) => trackAudioLoad(`Shockwave ${index + 1}`, audio));
         const customDataUrl = state.profile.skin?.customDataUrl;
         if (customDataUrl) {
           const resolveAsset = registerLoadingAsset("Custom Hull Skin");
@@ -3398,6 +3427,44 @@
         } catch {}
       }
 
+      function playAlarmistPing() {
+        ensureAudio();
+        ensureMusicPlayers();
+        if (!alarmistPingSound) return;
+        try {
+          alarmistPingSound.pause();
+          alarmistPingSound.currentTime = 0;
+          alarmistPingSound.volume = state.settings.volume;
+          alarmistPingSound.play().catch(() => {});
+        } catch {}
+      }
+
+      function playShockwaveSound() {
+        ensureAudio();
+        ensureMusicPlayers();
+        if (!shockwaveSounds.length) return;
+        const shockwaveSound = pickRandom(shockwaveSounds);
+        if (!shockwaveSound) return;
+        try {
+          shockwaveSound.pause();
+          shockwaveSound.currentTime = 0;
+          shockwaveSound.volume = state.settings.volume;
+          shockwaveSound.play().catch(() => {});
+        } catch {}
+      }
+
+      function playTemporalStrainDeadSound() {
+        ensureAudio();
+        ensureMusicPlayers();
+        if (!temporalStrainDeadSound) return;
+        try {
+          temporalStrainDeadSound.pause();
+          temporalStrainDeadSound.currentTime = 0;
+          temporalStrainDeadSound.volume = state.settings.volume;
+          temporalStrainDeadSound.play().catch(() => {});
+        } catch {}
+      }
+
       function setScreenShake(enabled) {
         state.settings.screenShake = enabled;
         localStorage.setItem("aether_vortex_screen_shake", String(enabled));
@@ -3417,6 +3484,11 @@
         if (boss2Music) boss2Music.volume = bossVolume;
         if (boss3Music) boss3Music.volume = bossVolume;
         if (boss7Music) boss7Music.volume = bossVolume;
+        if (alarmistPingSound) alarmistPingSound.volume = state.settings.volume;
+        if (temporalStrainDeadSound) temporalStrainDeadSound.volume = state.settings.volume;
+        for (const shockwaveSound of shockwaveSounds) {
+          shockwaveSound.volume = state.settings.volume;
+        }
       }
 
       function setShowBossTimer(enabled) {
@@ -10649,6 +10721,7 @@
         state.damageCooldown = Math.max(0, state.damageCooldown - dt);
 
         if (player.strain <= 0) {
+          playTemporalStrainDeadSound();
           player.strain = player.maxStrain * 0.35;
           damagePlayer(0.5, "strain");
           if (state.mode !== "playing") return;
@@ -14681,6 +14754,7 @@
           nearest = Math.min(nearest, Math.abs(dist - shockwave.radius));
           if (!shockwave.hit && Math.abs(dist - shockwave.radius) < shockwave.width + player.hitRadius) {
             shockwave.hit = true;
+            playShockwaveSound();
             const dx = player.x - b.x;
             const dy = player.y - b.y;
             const safeDist = Math.hypot(dx, dy) || 1;
@@ -15547,11 +15621,13 @@
           if (wireDist < 5 + player.hitRadius) {
             if (a.phase === 1 && a.pulseCooldown <= 0) {
               a.pulseCooldown = 0.5;
+              playAlarmistPing();
               spawnAlarmPulse();
               addFlash(a.x, a.y, "rgba(255, 172, 106, 0.2)", 120);
             } else if (a.phase === 4) {
               if (a.pulseCooldown <= 0) {
                 a.pulseCooldown = 0.34;
+                playAlarmistPing();
                 a.phase4CrossCount += 1;
                 spawnAlarmTripBurst(12, 238);
                 addFlash(player.x, player.y, "rgba(255, 148, 82, 0.18)", 60);
@@ -15609,6 +15685,7 @@
             nearest = Math.min(nearest, ringDist);
             if (!projectile.hitPlayer && ringDist < projectile.width + player.hitRadius) {
               projectile.hitPlayer = true;
+              playShockwaveSound();
               const knockAngle = Math.random() * TAU;
               player.pullVx += Math.cos(knockAngle) * 260;
               player.pullVy += Math.sin(knockAngle) * 260;
