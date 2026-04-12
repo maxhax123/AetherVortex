@@ -2357,7 +2357,7 @@
           : bossKey === "cesium"
           ? "The Cesium Jim-Dandy Superficial"
           : bossKey === "tantalum"
-          ? "The Tantalum Capacitive Redundant / 73Ta-VI"
+          ? "The Tantalum Capacitive Redundant"
           : bossKey === "luminosity"
           ? "Lord Luminosity the Noble Neon"
           : bossKey === "sili"
@@ -2561,6 +2561,21 @@
           spread: 34,
           color: "rgba(255, 155, 94, 0.95)",
           accent: "rgba(255, 230, 204, 0.98)"
+        },
+        superspear: {
+          name: "Superspear",
+          desc: "Launch one enormous guided-by-aim spear missile. It does not home onto the boss, but it subtly curves based on the angle you fire it at.",
+          priceCents: 6999,
+          missileCount: 1,
+          damagePercent: 0.065,
+          speed: 540,
+          turnRate: 0,
+          curveStrength: 118,
+          life: 4.8,
+          spread: 0,
+          sizeMultiplier: 1.65,
+          color: "rgba(255, 186, 102, 0.96)",
+          accent: "rgba(255, 241, 212, 0.99)"
         }
       };
       const achievementDefs = {
@@ -2718,7 +2733,8 @@
             twin_hunter: true,
             split_comet: true,
             vault_lance: Boolean(source.shop?.ownedXlBullets?.vault_lance),
-            ember_swarm: Boolean(source.shop?.ownedXlBullets?.ember_swarm)
+            ember_swarm: Boolean(source.shop?.ownedXlBullets?.ember_swarm),
+            superspear: Boolean(source.shop?.ownedXlBullets?.superspear)
           },
           selectedXlBullet: (source.shop?.ownedXlBullets?.[source.shop?.selectedXlBullet] || ["twin_hunter", "split_comet"].includes(source.shop?.selectedXlBullet))
             ? source.shop.selectedXlBullet
@@ -3081,6 +3097,7 @@
           sporeTimer: 0,
           survivalTimer: 0,
           shockwaveTimer: 0,
+          wallShockwaveCooldown: 0,
           shockwaves: [],
           projectiles: [],
           toxicTrail: [],
@@ -5271,6 +5288,7 @@
           sporeTimer: 0.02,
           survivalTimer: 13,
           shockwaveTimer: 1.1,
+          wallShockwaveCooldown: 0,
           shockwaves: [],
           projectiles: [],
           toxicTrail: [],
@@ -5446,6 +5464,17 @@
       function onGameOver() {
         updateProfileStats();
         saveProfile();
+        ensureMusicPlayers();
+        menuMusic.pause();
+        boss1Music.pause();
+        boss2Music.pause();
+        boss3Music.pause();
+        boss7Music.pause();
+        menuMusic.currentTime = 0;
+        boss1Music.currentTime = 0;
+        boss2Music.currentTime = 0;
+        boss3Music.currentTime = 0;
+        boss7Music.currentTime = 0;
         const bossHealthPercent = Math.round(clamp(state.bossHealth / Math.max(1, state.bossMaxHealth), 0, 1) * 100);
         state.gameOverBossName = getBossDisplayName(state.currentBoss);
         state.gameOverBossHealthText = `${bossHealthPercent}% · ${Math.max(0, Math.ceil(state.bossHealth))}/${Math.max(1, Math.ceil(state.bossMaxHealth))}`;
@@ -6118,6 +6147,7 @@
         for (let i = 0; i < meta.missileCount; i++) {
           const offsetIndex = i - (meta.missileCount - 1) * 0.5;
           const offset = offsetIndex * meta.spread;
+          const baseSize = (8 + meta.damagePercent * 220) * (meta.sizeMultiplier || 1);
           state.xlMissiles.push({
             type: xlId,
             x: player.x + sideX * offset + forwardX * 18,
@@ -6128,7 +6158,9 @@
             damage: state.bossMaxHealth * meta.damagePercent,
             turnRate: meta.turnRate,
             maxSpeed: meta.speed,
-            size: 8 + meta.damagePercent * 220,
+            size: baseSize,
+            originAngle: player.angle,
+            curveStrength: meta.curveStrength || 0,
             color: meta.color,
             accent: meta.accent,
             trail: []
@@ -10597,6 +10629,14 @@
               if (nucleusDist < nucleus.radius + shot.size + 2) {
                 damageBoss(shot.damage);
                 addSpark(shot.x, shot.y, "rgba(238, 255, 224, 0.96)", 6, 120);
+                if (state.bleach.phase === 3) {
+                  const pushDx = nucleus.x - player.x;
+                  const pushDy = nucleus.y - player.y;
+                  const pushDist = Math.hypot(pushDx, pushDy) || 1;
+                  state.bleach.vx += (pushDx / pushDist) * 46;
+                  state.bleach.vy += (pushDy / pushDist) * 46;
+                  addFlash(nucleus.x, nucleus.y, "rgba(238,255,210,0.16)", 46);
+                }
                 state.playerShots.splice(i, 1);
                 hitBleach = true;
                 break;
@@ -10748,11 +10788,17 @@
           const toBossX = bossPos.x - missile.x;
           const toBossY = bossPos.y - missile.y;
           const distance = Math.hypot(toBossX, toBossY) || 1;
-          const desiredVx = (toBossX / distance) * missile.maxSpeed;
-          const desiredVy = (toBossY / distance) * missile.maxSpeed;
-          const steer = Math.min(1, dt * missile.turnRate);
-          missile.vx += (desiredVx - missile.vx) * steer;
-          missile.vy += (desiredVy - missile.vy) * steer;
+          if (missile.type === "superspear") {
+            const facingBias = Math.sin(missile.originAngle) * missile.curveStrength;
+            missile.vx += facingBias * dt;
+            missile.vy += Math.cos(missile.originAngle) * 18 * dt;
+          } else {
+            const desiredVx = (toBossX / distance) * missile.maxSpeed;
+            const desiredVy = (toBossY / distance) * missile.maxSpeed;
+            const steer = Math.min(1, dt * missile.turnRate);
+            missile.vx += (desiredVx - missile.vx) * steer;
+            missile.vy += (desiredVy - missile.vy) * steer;
+          }
           const speed = Math.hypot(missile.vx, missile.vy) || 1;
           missile.vx = (missile.vx / speed) * missile.maxSpeed;
           missile.vy = (missile.vy / speed) * missile.maxSpeed;
@@ -13608,16 +13654,36 @@
           ctx.save();
           ctx.translate(missile.x, missile.y);
           ctx.rotate(angle);
-          ctx.fillStyle = missile.accent;
-          ctx.beginPath();
-          ctx.moveTo(missile.size * 1.55, 0);
-          ctx.lineTo(-missile.size * 0.9, missile.size * 0.7);
-          ctx.lineTo(-missile.size * 0.45, 0);
-          ctx.lineTo(-missile.size * 0.9, -missile.size * 0.7);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = missile.color;
-          ctx.fillRect(-missile.size * 1.35, -missile.size * 0.28, missile.size * 1.15, missile.size * 0.56);
+          if (missile.type === "superspear") {
+            ctx.fillStyle = missile.accent;
+            ctx.beginPath();
+            ctx.moveTo(missile.size * 1.95, 0);
+            ctx.lineTo(missile.size * 0.72, missile.size * 0.58);
+            ctx.lineTo(-missile.size * 1.35, missile.size * 0.58);
+            ctx.lineTo(-missile.size * 1.92, missile.size * 0.24);
+            ctx.lineTo(-missile.size * 1.92, -missile.size * 0.24);
+            ctx.lineTo(-missile.size * 1.35, -missile.size * 0.58);
+            ctx.lineTo(missile.size * 0.72, -missile.size * 0.58);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = missile.color;
+            ctx.fillRect(-missile.size * 1.42, -missile.size * 0.34, missile.size * 2.04, missile.size * 0.68);
+            ctx.fillStyle = "rgba(255, 132, 52, 0.88)";
+            ctx.fillRect(-missile.size * 1.76, -missile.size * 0.18, missile.size * 0.34, missile.size * 0.36);
+            ctx.fillStyle = "rgba(255, 238, 210, 0.42)";
+            ctx.fillRect(-missile.size * 0.36, -missile.size * 0.12, missile.size * 0.86, missile.size * 0.24);
+          } else {
+            ctx.fillStyle = missile.accent;
+            ctx.beginPath();
+            ctx.moveTo(missile.size * 1.55, 0);
+            ctx.lineTo(-missile.size * 0.9, missile.size * 0.7);
+            ctx.lineTo(-missile.size * 0.45, 0);
+            ctx.lineTo(-missile.size * 0.9, -missile.size * 0.7);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = missile.color;
+            ctx.fillRect(-missile.size * 1.35, -missile.size * 0.28, missile.size * 1.15, missile.size * 0.56);
+          }
           ctx.restore();
         }
         ctx.restore();
@@ -14747,6 +14813,17 @@
         }
       }
 
+      function spawnBleachRandomShockwave() {
+        state.bleach.shockwaves.push({
+          radius: getBleachCoreRadius() * 0.5,
+          speed: 320,
+          width: 20,
+          life: 2.1,
+          hit: false,
+          randomKick: true
+        });
+      }
+
       function updateBleachBoss(dt) {
         const b = state.bleach;
         const healthRatio = state.bossHealth / Math.max(1, state.bossMaxHealth);
@@ -14767,6 +14844,7 @@
         b.rotation += dt * (b.phase === 3 ? 2.1 : b.phase === 2 ? 1.45 : b.phase >= 4 ? 0.42 : 0.8);
         b.bondPulse += dt * (2.2 + b.phase * 0.4);
         b.flashTimer = Math.max(0, b.flashTimer - dt);
+        b.wallShockwaveCooldown = Math.max(0, b.wallShockwaveCooldown - dt);
 
         const minX = 120;
         const maxX = width - 120;
@@ -14776,19 +14854,34 @@
         if (b.phase >= 4) {
           b.targetX = centerX;
           b.targetY = centerY;
+        } else if (b.phase === 3) {
+          const chaseDx = player.x - b.x;
+          const chaseDy = player.y - b.y;
+          const chaseDist = Math.hypot(chaseDx, chaseDy) || 1;
+          const leadDistance = Math.min(96, chaseDist * 0.18);
+          b.targetX = clamp(player.x - (chaseDx / chaseDist) * leadDistance, minX, maxX);
+          b.targetY = clamp(player.y - (chaseDy / chaseDist) * leadDistance, minY, maxY);
+          b.driftTimer = 0.18;
         } else if (b.driftTimer <= 0) {
           b.driftTimer = b.phase >= 4 ? 0.75 + Math.random() * 0.8 : 1.1 + Math.random() * 1.1;
           b.targetX = minX + Math.random() * Math.max(30, maxX - minX);
           b.targetY = minY + Math.random() * Math.max(20, maxY - minY);
         }
-        const driftForce = b.phase === 2 ? 3.6 : b.phase >= 4 ? 2.3 : 3.4;
+        const driftForce = b.phase === 3 ? 5.1 : b.phase === 2 ? 3.6 : b.phase >= 4 ? 2.3 : 3.4;
         b.vx += (b.targetX - b.x) * dt * driftForce;
         b.vy += (b.targetY - b.y) * dt * driftForce;
-        b.vx *= b.phase === 2 ? 0.995 : 0.94;
-        b.vy *= b.phase === 2 ? 0.995 : 0.94;
+        b.vx *= b.phase === 2 ? 0.995 : b.phase === 3 ? 0.97 : 0.94;
+        b.vy *= b.phase === 2 ? 0.995 : b.phase === 3 ? 0.97 : 0.94;
         if (b.phase === 5) {
           b.vx *= 0.84;
           b.vy *= 0.84;
+        }
+        const speedCap = b.phase === 3 ? 365 : b.phase === 2 ? 290 : b.phase >= 4 ? 250 : 220;
+        const speed = Math.hypot(b.vx, b.vy);
+        if (speed > speedCap) {
+          const scale = speedCap / speed;
+          b.vx *= scale;
+          b.vy *= scale;
         }
         b.x = clamp(b.x + b.vx * dt, minX, maxX);
         b.y = clamp(b.y + b.vy * dt, minY, maxY);
@@ -14835,18 +14928,50 @@
           const nuclei = getBleachNucleiStates();
           for (let idx = 0; idx < nuclei.length; idx++) {
             const nucleus = nuclei[idx];
-            if (nucleus.x < nucleus.radius || nucleus.x > width - nucleus.radius) b.vx *= -1;
-            if (nucleus.y < nucleus.radius || nucleus.y > height - nucleus.radius) b.vy *= -1;
+            let wallImpact = false;
+            if (nucleus.x < nucleus.radius || nucleus.x > width - nucleus.radius) {
+              b.vx *= -1;
+              wallImpact = true;
+            }
+            if (nucleus.y < nucleus.radius || nucleus.y > height - nucleus.radius) {
+              b.vy *= -1;
+              wallImpact = true;
+            }
+            if (wallImpact) {
+              b.x = clamp(b.x, minX, maxX);
+              b.y = clamp(b.y, minY, maxY);
+              state.shake = Math.max(state.shake, 12);
+              addFlash(nucleus.x, nucleus.y, "rgba(240,255,214,0.18)", 70);
+              if (b.wallShockwaveCooldown <= 0) {
+                b.wallShockwaveCooldown = 0.42;
+                spawnBleachRandomShockwave();
+              }
+            }
           }
         } else if (b.phase === 3) {
           b.splitLerp = Math.max(0, b.splitLerp - dt * 1.8);
           b.purgeTimer -= dt;
+          b.gasTimer -= dt;
+          b.shardTimer -= dt;
           if (b.purgeTimer <= 0) {
-            b.purgeTimer = 0.95;
-            spawnBleachPurgeCursor(Math.random() > 0.5 ? "left" : "right");
+            b.purgeTimer = 0.62;
+            const primarySide = Math.random() > 0.5 ? "left" : "right";
+            spawnBleachPurgeCursor(primarySide);
+            if (Math.random() < 0.65) {
+              spawnBleachPurgeCursor(primarySide === "left" ? "right" : "left");
+            }
           }
           if (b.flashTimer <= 0) {
-            b.flashTimer = 3.5;
+            b.flashTimer = 2.7;
+          }
+          if (b.gasTimer <= 0) {
+            b.gasTimer = 1.15;
+            spawnBleachGasCloud();
+            if (Math.random() < 0.45) spawnBleachGasCloud();
+          }
+          if (b.shardTimer <= 0) {
+            b.shardTimer = 2.25;
+            spawnBleachShards();
           }
         } else if (b.phase === 4) {
           b.splitLerp = Math.max(0, b.splitLerp - dt * 1.8);
@@ -14940,11 +15065,17 @@
           if (!shockwave.hit && Math.abs(dist - shockwave.radius) < shockwave.width + player.hitRadius) {
             shockwave.hit = true;
             playShockwaveSound();
-            const dx = player.x - b.x;
-            const dy = player.y - b.y;
-            const safeDist = Math.hypot(dx, dy) || 1;
-            player.pullVx += (dx / safeDist) * 480;
-            player.pullVy += (dy / safeDist) * 480;
+            if (shockwave.randomKick) {
+              const knockAngle = Math.random() * TAU;
+              player.pullVx += Math.cos(knockAngle) * 320;
+              player.pullVy += Math.sin(knockAngle) * 320;
+            } else {
+              const dx = player.x - b.x;
+              const dy = player.y - b.y;
+              const safeDist = Math.hypot(dx, dy) || 1;
+              player.pullVx += (dx / safeDist) * 480;
+              player.pullVy += (dy / safeDist) * 480;
+            }
             state.shake = Math.max(state.shake, 24);
             addFlash(player.x, player.y, "rgba(236,255,220,0.22)", 96);
           }
@@ -15667,7 +15798,7 @@
             a.warningTimer = 2.2;
             a.redFlashTimer = 0.5;
             a.freezeTimer = 0.9;
-            a.burstSpeedTimer = 1;
+            a.burstSpeedTimer = 2;
             spawnAlarmTripBurst(14, 250);
           }
           if (a.ashTimer <= 0) {
@@ -15824,7 +15955,7 @@
           }
         }
 
-        const speedMultiplier = a.burstSpeedTimer > 0 ? 2 : 1;
+        const speedMultiplier = a.burstSpeedTimer > 0 ? 3 : 1;
         const frozen = a.freezeTimer > 0;
         for (let i = a.projectiles.length - 1; i >= 0; i--) {
           const projectile = a.projectiles[i];
