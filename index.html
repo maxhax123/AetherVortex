@@ -2370,6 +2370,8 @@
           ? "The Bleach Baron"
           : bossKey === "alarmist"
           ? "Ambitious Alarmist-Am"
+          : bossKey === "slabhraidh"
+          ? "Stalwart Slabhraidh"
           : "Hertz's Harmony";
       const bosses = [
         {
@@ -2439,10 +2441,10 @@
           teaser: "A radioactive puck wrapped in industrial iris-blades. Expect tripwire alarms, scanning sweeps, decoy cores, overload webs, and a final radiation storm."
         },
         {
-          name: "Spot Reserved",
-          active: false,
-          status: "RESERVED",
-          teaser: "This containment slot is reserved for a future boss encounter."
+          name: "Stalwart Slabhraidh",
+          active: true,
+          status: "ACTIVE",
+          teaser: "A manganese-steel triangular core with three chainsaw guide bars and sliding digital teeth. Expect rotating pellet walls, slick oil hazards, a snapped-off bar, Touhou-tier shredder patterns, and a final spark singularity."
         },
         {
           name: "Spot Reserved",
@@ -2590,6 +2592,7 @@
         beauty_down: { title: "Iridescence Lost", desc: "Defeat Beauty Bismuth." },
         bleach_down: { title: "Baron Neutralized", desc: "Defeat The Bleach Baron." },
         alarmist_down: { title: "Alarm Silenced", desc: "Defeat Ambitious Alarmist-Am." },
+        slabhraidh_down: { title: "Bars Broken", desc: "Defeat Stalwart Slabhraidh." },
         arsenal_tuned: { title: "Arsenal Tuned", desc: "Purchase your first shop upgrade." },
         score_2500: { title: "Signal Ascendant", desc: "Reach a score of 2500." },
         score_5000: { title: "Signal Unbroken", desc: "Reach a score of 5000." },
@@ -2768,7 +2771,8 @@
             caesar: Boolean(source.bossRecords?.caesar),
             beauty: Boolean(source.bossRecords?.beauty),
             bleach: Boolean(source.bossRecords?.bleach),
-            alarmist: Boolean(source.bossRecords?.alarmist)
+            alarmist: Boolean(source.bossRecords?.alarmist),
+            slabhraidh: Boolean(source.bossRecords?.slabhraidh)
           },
           skin: {
             preset: source.skin?.preset || "gold",
@@ -3139,6 +3143,30 @@
           floorBlades: [],
           fragments: []
         },
+        slabhraidh: {
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          phase: 1,
+          rotation: 0,
+          targetX: 0,
+          targetY: 0,
+          driftTimer: 0,
+          pelletTimer: 0,
+          oilTimer: 0,
+          extendTimer: 0,
+          extendAmount: 0,
+          hookTimer: 0,
+          patternTimer: 0,
+          sparkTimer: 0,
+          beamSpin: 0,
+          snappedBarIndex: 2,
+          detachedBar: null,
+          projectiles: [],
+          slicks: [],
+          fragments: []
+        },
         settings: {
           volume: Number.isFinite(storedVolume) ? clamp(storedVolume, 0, 1) : 0.65,
           screenShake: storedShake === null ? true : storedShake === "true",
@@ -3193,6 +3221,7 @@
       let boss2Music = null;
       let boss3Music = null;
       let boss7Music = null;
+      let boss12Music = null;
       let achievementSound = null;
       let alarmistPingSound = null;
       let shockwaveSounds = [];
@@ -3262,6 +3291,11 @@
           boss7Music.loop = true;
           boss7Music.preload = "auto";
         }
+        if (!boss12Music) {
+          boss12Music = new Audio("boss12.m4a");
+          boss12Music.loop = true;
+          boss12Music.preload = "auto";
+        }
         if (!achievementSound) {
           achievementSound = new Audio("youachievedsomethinginlife.mp3");
           achievementSound.loop = false;
@@ -3298,6 +3332,7 @@
         boss2Music.volume = getBossMusicVolume();
         boss3Music.volume = getBossMusicVolume();
         boss7Music.volume = getBossMusicVolume();
+        boss12Music.volume = getBossMusicVolume();
         achievementSound.volume = state.settings.volume;
         alarmistPingSound.volume = state.settings.volume;
         temporalStrainDeadSound.volume = state.settings.volume;
@@ -3383,6 +3418,7 @@
         trackAudioLoad("Sovereign Track", boss2Music);
         trackAudioLoad("Monarch Track", boss3Music);
         trackAudioLoad("Sili Track", boss7Music);
+        trackAudioLoad("Stalwart Track", boss12Music);
         trackAudioLoad("Achievement Cue", achievementSound);
         trackAudioLoad("Alarmist Ping", alarmistPingSound);
         trackAudioLoad("Temporal Strain Dead", temporalStrainDeadSound);
@@ -3405,6 +3441,7 @@
         if (state.currentBoss === "tantalum") return boss3Music;
         if (state.currentBoss === "luminosity") return boss3Music;
         if (state.currentBoss === "sili") return boss7Music;
+        if (state.currentBoss === "slabhraidh") return boss12Music;
         if (state.currentBoss === "caesar" || state.currentBoss === "beauty" || state.currentBoss === "bleach" || state.currentBoss === "alarmist") return boss3Music;
         return boss1Music;
       }
@@ -3432,14 +3469,17 @@
           boss2Music.pause();
           boss3Music.pause();
           boss7Music.pause();
+          boss12Music.pause();
           boss1Music.currentTime = 0;
           boss2Music.currentTime = 0;
           boss3Music.currentTime = 0;
           boss7Music.currentTime = 0;
+          boss12Music.currentTime = 0;
           boss1Music.playbackRate = 1;
           boss2Music.playbackRate = 1;
           boss3Music.playbackRate = 1;
           boss7Music.playbackRate = 1;
+          boss12Music.playbackRate = 1;
           menuMusic.volume = getMenuMusicVolume();
           menuMusic.play().catch(() => {});
           return;
@@ -3447,7 +3487,7 @@
 
         if (target === "boss") {
           const activeBossMusic = getActiveBossMusic();
-          const inactiveBossTracks = [boss1Music, boss2Music, boss3Music, boss7Music].filter((audio) => audio !== activeBossMusic);
+          const inactiveBossTracks = [boss1Music, boss2Music, boss3Music, boss7Music, boss12Music].filter((audio) => audio !== activeBossMusic);
           menuMusic.pause();
           menuMusic.currentTime = 0;
           menuMusic.playbackRate = 1;
@@ -3469,12 +3509,13 @@
         boss2Music.pause();
         boss3Music.pause();
         boss7Music.pause();
+        boss12Music.pause();
       }
 
       function updateMusicForState(dt) {
         ensureMusicPlayers();
         const activeBossMusic = getActiveBossMusic();
-        const inactiveBossTracks = [boss1Music, boss2Music, boss3Music, boss7Music].filter((audio) => audio !== activeBossMusic);
+        const inactiveBossTracks = [boss1Music, boss2Music, boss3Music, boss7Music, boss12Music].filter((audio) => audio !== activeBossMusic);
         if (state.mode === "gameover") {
           if (!activeBossMusic.paused) {
             activeBossMusic.playbackRate = Math.max(0.58, activeBossMusic.playbackRate - dt * 0.28);
@@ -3644,6 +3685,7 @@
         if (boss2Music) boss2Music.volume = bossVolume;
         if (boss3Music) boss3Music.volume = bossVolume;
         if (boss7Music) boss7Music.volume = bossVolume;
+        if (boss12Music) boss12Music.volume = bossVolume;
         if (alarmistPingSound) alarmistPingSound.volume = state.settings.volume;
         if (temporalStrainDeadSound) temporalStrainDeadSound.volume = state.settings.volume;
         for (const deathSound of deathSounds) {
@@ -3706,11 +3748,11 @@
       }
 
       function getBossRecordKey(index) {
-        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : "architect";
+        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : index === 11 ? "slabhraidh" : "architect";
       }
 
       function getBossIndexFromKey(key) {
-        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : key === "sili" ? 6 : key === "caesar" ? 7 : key === "beauty" ? 8 : key === "bleach" ? 9 : key === "alarmist" ? 10 : 0;
+        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : key === "sili" ? 6 : key === "caesar" ? 7 : key === "beauty" ? 8 : key === "bleach" ? 9 : key === "alarmist" ? 10 : key === "slabhraidh" ? 11 : 0;
       }
 
       function getBossPayoutCents(key) {
@@ -5335,18 +5377,45 @@
         };
       }
 
+      function resetSlabhraidhState() {
+        state.slabhraidh = {
+          x: centerX,
+          y: height * 0.23,
+          vx: 0,
+          vy: 0,
+          phase: 1,
+          rotation: 0,
+          targetX: centerX,
+          targetY: height * 0.23,
+          driftTimer: 0.9,
+          pelletTimer: 1.6,
+          oilTimer: 0.45,
+          extendTimer: 2.8,
+          extendAmount: 0,
+          hookTimer: 1.2,
+          patternTimer: 0.24,
+          sparkTimer: 0.08,
+          beamSpin: 0,
+          snappedBarIndex: 2,
+          detachedBar: null,
+          projectiles: [],
+          slicks: [],
+          fragments: []
+        };
+      }
+
       function startBossEncounter(index) {
         if (state.profile.bossRecords[getBossRecordKey(index)]) {
           awardAchievement("resurrected");
         }
-        state.currentBoss = index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : "architect";
+        state.currentBoss = index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : index === 11 ? "slabhraidh" : "architect";
         if (state.currentBoss === "architect") {
           startArchitectCutscene();
           return;
         }
         resetGame("cutscene");
-        state.currentBoss = index === 10 ? "alarmist" : index === 9 ? "bleach" : index === 8 ? "beauty" : index === 7 ? "caesar" : index === 6 ? "sili" : index === 5 ? "luminosity" : index === 4 ? "tantalum" : index === 3 ? "cesium" : index === 2 ? "monarch" : "sovereign";
-        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : state.currentBoss === "caesar" ? 4700 : state.currentBoss === "beauty" ? 5400 : state.currentBoss === "bleach" ? 6200 : state.currentBoss === "alarmist" ? 6900 : 2400;
+        state.currentBoss = index === 11 ? "slabhraidh" : index === 10 ? "alarmist" : index === 9 ? "bleach" : index === 8 ? "beauty" : index === 7 ? "caesar" : index === 6 ? "sili" : index === 5 ? "luminosity" : index === 4 ? "tantalum" : index === 3 ? "cesium" : index === 2 ? "monarch" : "sovereign";
+        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : state.currentBoss === "caesar" ? 4700 : state.currentBoss === "beauty" ? 5400 : state.currentBoss === "bleach" ? 6200 : state.currentBoss === "alarmist" ? 6900 : state.currentBoss === "slabhraidh" ? 7600 : 2400;
         state.bossHealth = state.bossMaxHealth;
         state.bossPhase = 1;
         state.cutsceneTime = 0;
@@ -5361,6 +5430,7 @@
         resetBeautyState();
         resetBleachState();
         resetAlarmistState();
+        resetSlabhraidhState();
         playMusic("boss");
         overlay.innerHTML = `<div class="warning-shell"><div class="warning-text" id="warningText"></div></div>`;
         overlay.classList.add("show");
@@ -5381,7 +5451,7 @@
       }
 
       function restartCurrentEncounter() {
-        const bossIndex = state.currentBoss === "sovereign" ? 1 : state.currentBoss === "monarch" ? 2 : state.currentBoss === "cesium" ? 3 : state.currentBoss === "tantalum" ? 4 : state.currentBoss === "luminosity" ? 5 : state.currentBoss === "sili" ? 6 : state.currentBoss === "caesar" ? 7 : state.currentBoss === "beauty" ? 8 : state.currentBoss === "bleach" ? 9 : state.currentBoss === "alarmist" ? 10 : 0;
+        const bossIndex = state.currentBoss === "sovereign" ? 1 : state.currentBoss === "monarch" ? 2 : state.currentBoss === "cesium" ? 3 : state.currentBoss === "tantalum" ? 4 : state.currentBoss === "luminosity" ? 5 : state.currentBoss === "sili" ? 6 : state.currentBoss === "caesar" ? 7 : state.currentBoss === "beauty" ? 8 : state.currentBoss === "bleach" ? 9 : state.currentBoss === "alarmist" ? 10 : state.currentBoss === "slabhraidh" ? 11 : 0;
         startBossEncounter(bossIndex);
       }
 
@@ -5433,6 +5503,7 @@
         resetBeautyState();
         resetBleachState();
         resetAlarmistState();
+        resetSlabhraidhState();
         player.x = centerX;
         player.y = height * 0.82;
         player.pullVx = 0;
@@ -5470,11 +5541,13 @@
         boss2Music.pause();
         boss3Music.pause();
         boss7Music.pause();
+        boss12Music.pause();
         menuMusic.currentTime = 0;
         boss1Music.currentTime = 0;
         boss2Music.currentTime = 0;
         boss3Music.currentTime = 0;
         boss7Music.currentTime = 0;
+        boss12Music.currentTime = 0;
         const bossHealthPercent = Math.round(clamp(state.bossHealth / Math.max(1, state.bossMaxHealth), 0, 1) * 100);
         state.gameOverBossName = getBossDisplayName(state.currentBoss);
         state.gameOverBossHealthText = `${bossHealthPercent}% · ${Math.max(0, Math.ceil(state.bossHealth))}/${Math.max(1, Math.ceil(state.bossMaxHealth))}`;
@@ -5537,9 +5610,7 @@
       }
 
       function getCurrentBossPhaseCount() {
-        return state.currentBoss === "bleach"
-          ? 5
-          : state.currentBoss === "alarmist"
+        return state.currentBoss === "bleach" || state.currentBoss === "alarmist" || state.currentBoss === "slabhraidh"
           ? 5
           : state.currentBoss === "sili" || state.currentBoss === "caesar" || state.currentBoss === "beauty"
           ? 4
@@ -5605,6 +5676,7 @@
         if (state.currentBoss === "beauty") state.beauty.phase = phase;
         if (state.currentBoss === "bleach") state.bleach.phase = phase;
         if (state.currentBoss === "alarmist") state.alarmist.phase = phase;
+        if (state.currentBoss === "slabhraidh") state.slabhraidh.phase = phase;
         state.pausePhasePanelOpen = false;
         renderPauseOverlay();
       }
@@ -5746,6 +5818,10 @@
         state.alarmist.blades.length = 0;
         state.alarmist.floorBlades.length = 0;
         state.alarmist.fragments.length = 0;
+        state.slabhraidh.projectiles.length = 0;
+        state.slabhraidh.slicks.length = 0;
+        state.slabhraidh.detachedBar = null;
+        state.slabhraidh.fragments.length = 0;
       }
 
       function updateEvolutionProgressFromBossDamage() {
@@ -6029,6 +6105,16 @@
               remove: () => state.alarmist.projectiles.splice(index, 1)
             });
           }
+        } else if (state.currentBoss === "slabhraidh") {
+          if (state.slabhraidh.projectiles.length) {
+            const index = Math.floor(Math.random() * state.slabhraidh.projectiles.length);
+            const projectile = state.slabhraidh.projectiles[index];
+            candidates.push({
+              x: projectile.x,
+              y: projectile.y,
+              remove: () => state.slabhraidh.projectiles.splice(index, 1)
+            });
+          }
         }
         if (!candidates.length || Math.random() > 0.3) return;
         const chosen = candidates[Math.floor(Math.random() * candidates.length)];
@@ -6110,6 +6196,8 @@
           ? { x: state.bleach.x, y: state.bleach.y }
           : state.currentBoss === "alarmist"
           ? { x: state.alarmist.x, y: state.alarmist.y }
+          : state.currentBoss === "slabhraidh"
+          ? { x: state.slabhraidh.x, y: state.slabhraidh.y }
           : { x: state.caesar.x, y: state.caesar.y },
           radius: state.currentBoss === "architect"
             ? 58
@@ -6131,6 +6219,8 @@
             ? 74
             : state.currentBoss === "alarmist"
             ? getAlarmistCoreRadius()
+            : state.currentBoss === "slabhraidh"
+            ? getSlabhraidhCoreRadius()
             : getCaesarCoreRadius()
         };
       }
@@ -9600,6 +9690,11 @@
               state.cutsceneTime > 1.65
                 ? "Containment 11 Escalating... Ambitious Alarmist-Am Raising A Full Facility Alarm."
                 : "Tripwire Sensors Heating Into A Radioactive Orange...";
+          } else if (state.currentBoss === "slabhraidh") {
+            warningText.textContent =
+              state.cutsceneTime > 1.65
+                ? "Containment 12 Grinding Awake... Stalwart Slabhraidh Spinning Up The Guide Bars."
+                : "Manganese Teeth Clattering Into A Lethal Rhythm...";
           } else {
             warningText.textContent =
               state.cutsceneTime > 1.45
@@ -9633,9 +9728,10 @@
         state.beauty.fragments.length = 0;
         state.bleach.fragments.length = 0;
         state.alarmist.fragments.length = 0;
+        state.slabhraidh.fragments.length = 0;
         overlay.innerHTML = `
           <div class="warning-shell">
-            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent."}</div>
+            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : state.currentBoss === "alarmist" ? "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent." : "Stalwart Slabhraidh Seizing Up. Guide Bars Tearing Loose."}</div>
           </div>
         `;
         overlay.classList.add("show");
@@ -9665,6 +9761,8 @@
           ? { x: state.bleach.x, y: state.bleach.y }
           : state.victoryBoss === "alarmist"
           ? { x: state.alarmist.x, y: state.alarmist.y }
+          : state.victoryBoss === "slabhraidh"
+          ? { x: state.slabhraidh.x, y: state.slabhraidh.y }
           : { x: state.caesar.x, y: state.caesar.y };
 
         if (!state.victoryExplosionTriggered && state.victoryTime > 0.15) {
@@ -9860,6 +9958,20 @@
               life: 4.2,
               color: "rgba(118,92,74,0.94)"
             });
+          } else if (state.victoryBoss === "slabhraidh") {
+            for (let i = 0; i < 150; i++) {
+              const angle = Math.random() * TAU;
+              state.slabhraidh.fragments.push({
+                x: vortex.x + Math.cos(angle) * (18 + Math.random() * 76),
+                y: vortex.y + Math.sin(angle) * (18 + Math.random() * 76),
+                vx: Math.cos(angle) * (36 + Math.random() * 210),
+                vy: Math.sin(angle) * (30 + Math.random() * 210),
+                size: 4 + Math.random() * 12,
+                rotation: Math.random() * TAU,
+                life: 4.6,
+                color: i % 6 === 0 ? "rgba(255,174,98,0.92)" : "rgba(124,128,136,0.94)"
+              });
+            }
           } else {
             for (let i = 0; i < 6; i++) {
               const angle = (i / 6) * TAU;
@@ -9921,6 +10033,8 @@
             victoryText.textContent = "The Bleach Baron Melted Down. Only Dull Grey Sludge Remains.";
           } else if (state.victoryBoss === "alarmist" && state.victoryTime > 3.2) {
             victoryText.textContent = "Alarmist-Am Burned Out. Only Rusted Blades And Coal Remain.";
+          } else if (state.victoryBoss === "slabhraidh" && state.victoryTime > 3.2) {
+            victoryText.textContent = "Stalwart Slabhraidh Shattered. Only Cold Steel Debris Remains.";
           } else if (state.victoryBoss === "sovereign" && state.victoryTime > 3.2) {
             victoryText.textContent = "Sovereign Fission Complete. Containment Restored.";
           } else if (state.victoryTime > 3.2) {
@@ -9946,6 +10060,8 @@
               ? "Bleach Baron Bond Cracking. Corrosive Sludge Pool Expanding."
               : state.victoryBoss === "alarmist"
               ? "Alarmist-Am Falling Quiet. The Iris Blades Are Rusting Midair."
+              : state.victoryBoss === "slabhraidh"
+              ? "Slabhraidh Grinding To A Stop. Guide Bars Are Tearing Free."
               : "Caesar Rails Losing Polarity. Core Implosion Starting.";
           } else {
             victoryText.textContent = state.victoryBoss === "architect"
@@ -9968,6 +10084,8 @@
               ? "The Bleach Baron Melting Down. Corrosive Flood Imminent."
               : state.victoryBoss === "alarmist"
               ? "Ambitious Alarmist-Am Overheating. Shutdown Failure Imminent."
+              : state.victoryBoss === "slabhraidh"
+              ? "Stalwart Slabhraidh Work-Hardening One Final Time. Mechanical Failure Imminent."
               : "Caesar Dy Cracking Silver. Magnetic Collapse Imminent.";
           }
           const fadeStart = 5.6;
@@ -10018,6 +10136,10 @@
           state.alarmist.blades.length = 0;
           state.alarmist.floorBlades.length = 0;
           state.alarmist.fragments.length = 0;
+          state.slabhraidh.projectiles.length = 0;
+          state.slabhraidh.slicks.length = 0;
+          state.slabhraidh.detachedBar = null;
+          state.slabhraidh.fragments.length = 0;
           state.victoryProjectilesCleared = true;
         }
 
@@ -10124,6 +10246,16 @@
           fragment.life -= dt;
           if (fragment.life <= 0) state.alarmist.fragments.splice(i, 1);
         }
+        for (let i = state.slabhraidh.fragments.length - 1; i >= 0; i--) {
+          const fragment = state.slabhraidh.fragments[i];
+          fragment.x += fragment.vx * dt;
+          fragment.y += fragment.vy * dt;
+          fragment.rotation += dt * 1.2;
+          fragment.vx *= 0.992;
+          fragment.vy = fragment.vy * 0.992 + 14 * dt;
+          fragment.life -= dt;
+          if (fragment.life <= 0) state.slabhraidh.fragments.splice(i, 1);
+        }
       }
 
       function returnToMenu() {
@@ -10195,6 +10327,10 @@
         state.alarmist.blades.length = 0;
         state.alarmist.floorBlades.length = 0;
         state.alarmist.fragments.length = 0;
+        state.slabhraidh.projectiles.length = 0;
+        state.slabhraidh.slicks.length = 0;
+        state.slabhraidh.fragments.length = 0;
+        state.slabhraidh.detachedBar = null;
         renderMainMenu();
       }
 
@@ -10242,6 +10378,10 @@
           addFlash(state.alarmist.x, state.alarmist.y, "rgba(255, 208, 154, 0.82)", 320);
           addSpark(state.alarmist.x, state.alarmist.y, "rgba(255, 224, 182, 0.96)", 150, 360);
           awardAchievement("alarmist_down");
+        } else if (state.currentBoss === "slabhraidh") {
+          addFlash(state.slabhraidh.x, state.slabhraidh.y, "rgba(255, 196, 120, 0.82)", 330);
+          addSpark(state.slabhraidh.x, state.slabhraidh.y, "rgba(255, 222, 176, 0.96)", 152, 360);
+          awardAchievement("slabhraidh_down");
         } else {
           addFlash(state.caesar.x, state.caesar.y, "rgba(220, 255, 232, 0.82)", 290);
           addSpark(state.caesar.x, state.caesar.y, "rgba(214, 255, 224, 0.96)", 136, 340);
@@ -10411,15 +10551,28 @@
         addSpark(muzzleX, muzzleY, "rgba(255, 215, 106, 0.95)", 6 + level, 100);
       }
 
+      function getSlabhraidhSlickControl() {
+        if (state.currentBoss !== "slabhraidh" || state.mode !== "playing") {
+          return { move: 1, turn: 1, damping: 4.4 };
+        }
+        for (const slick of state.slabhraidh.slicks) {
+          if (Math.hypot(player.x - slick.x, player.y - slick.y) < slick.radius + player.hitRadius) {
+            return { move: 0.82, turn: 0.7, damping: 1.45 };
+          }
+        }
+        return { move: 1, turn: 1, damping: 4.4 };
+      }
+
       function updatePlayer(dt) {
         const fpsUnlockActive = state.fpsUnlockTimer > 0;
         const macroActive = state.macroBurstTimer > 0;
         const rootActive = state.rootOverrideTimer > 0;
         const tantalumSlow = isPlayerInTantalumAura() ? 0.65 : 1;
+        const slabhraidhSlick = getSlabhraidhSlickControl();
         let thrust = 0;
-        const turnSpeed = player.turnSpeed * (fpsUnlockActive ? 1.22 : rootActive ? 1.18 : macroActive ? 1.1 : 1);
-        const moveSpeed = player.moveSpeed * (fpsUnlockActive ? 1.15 : rootActive ? 1.12 : macroActive ? 1.08 : 1) * tantalumSlow;
-        const reverseSpeed = player.reverseSpeed * (fpsUnlockActive ? 1.12 : rootActive ? 1.1 : macroActive ? 1.06 : 1) * tantalumSlow;
+        const turnSpeed = player.turnSpeed * (fpsUnlockActive ? 1.22 : rootActive ? 1.18 : macroActive ? 1.1 : 1) * slabhraidhSlick.turn;
+        const moveSpeed = player.moveSpeed * (fpsUnlockActive ? 1.15 : rootActive ? 1.12 : macroActive ? 1.08 : 1) * tantalumSlow * slabhraidhSlick.move;
+        const reverseSpeed = player.reverseSpeed * (fpsUnlockActive ? 1.12 : rootActive ? 1.1 : macroActive ? 1.06 : 1) * tantalumSlow * slabhraidhSlick.move;
         if (actionPressed("turn_left")) player.angle -= turnSpeed * dt;
         if (actionPressed("turn_right")) player.angle += turnSpeed * dt;
         if (input.mobileTurnLeft) player.angle -= turnSpeed * dt;
@@ -10454,7 +10607,7 @@
 
         player.x += player.pullVx * dt;
         player.y += player.pullVy * dt;
-        const pullDamping = Math.max(0, 1 - dt * 4.4);
+        const pullDamping = Math.max(0, 1 - dt * (slabhraidhSlick.damping));
         player.pullVx *= pullDamping;
         player.pullVy *= pullDamping;
 
@@ -10633,8 +10786,8 @@
                   const pushDx = nucleus.x - player.x;
                   const pushDy = nucleus.y - player.y;
                   const pushDist = Math.hypot(pushDx, pushDy) || 1;
-                  state.bleach.vx += (pushDx / pushDist) * 46;
-                  state.bleach.vy += (pushDy / pushDist) * 46;
+                  state.bleach.vx += (pushDx / pushDist) * 24;
+                  state.bleach.vy += (pushDy / pushDist) * 24;
                   addFlash(nucleus.x, nucleus.y, "rgba(238,255,210,0.16)", 46);
                 }
                 state.playerShots.splice(i, 1);
@@ -10643,6 +10796,30 @@
               }
             }
             if (hitBleach) continue;
+          } else if (state.currentBoss === "slabhraidh") {
+            let hitSlabhraidh = false;
+            for (const bar of getSlabhraidhBarStates()) {
+              if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2)) {
+                damageBoss(0.5);
+                addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+                state.playerShots.splice(i, 1);
+                hitSlabhraidh = true;
+                break;
+              }
+            }
+            if (!hitSlabhraidh && state.slabhraidh.detachedBar && slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2)) {
+              damageBoss(0.5);
+              addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+              state.playerShots.splice(i, 1);
+              hitSlabhraidh = true;
+            }
+            if (!hitSlabhraidh && Math.hypot(shot.x - state.slabhraidh.x, shot.y - state.slabhraidh.y) < getSlabhraidhCoreRadius() + shot.size + 2) {
+              damageBoss(shot.damage);
+              addSpark(shot.x, shot.y, "rgba(255, 210, 150, 0.96)", 6, 120);
+              state.playerShots.splice(i, 1);
+              hitSlabhraidh = true;
+            }
+            if (hitSlabhraidh) continue;
           }
           shot.x += shot.vx * dt;
           shot.y += shot.vy * dt;
@@ -10985,6 +11162,8 @@
           if (state.fpsUnlockTimer <= 0) updateBleachBoss(dt * enemyTimeScale);
         } else if (state.currentBoss === "alarmist") {
           if (state.fpsUnlockTimer <= 0) updateAlarmistBoss(dt * enemyTimeScale);
+        } else if (state.currentBoss === "slabhraidh") {
+          if (state.fpsUnlockTimer <= 0) updateSlabhraidhBoss(dt * enemyTimeScale);
         }
         if (state.mode !== "playing") return;
         updatePlayerShots(dt);
@@ -11117,6 +11296,7 @@
         else if (state.currentBoss === "beauty") drawBeautyBoss();
         else if (state.currentBoss === "bleach") drawBleachBoss();
         else if (state.currentBoss === "alarmist") drawAlarmistBoss();
+        else if (state.currentBoss === "slabhraidh") drawSlabhraidhBoss();
         ctx.restore();
       }
 
@@ -11621,12 +11801,13 @@
         else if (index === 8) drawBeautyPreview(targetCtx, time);
         else if (index === 9) drawBleachPreview(targetCtx, time);
         else if (index === 10) drawAlarmistPreview(targetCtx, time);
+        else if (index === 11) drawSlabhraidhPreview(targetCtx, time);
       }
 
       function getMenuAmbientBossIndices() {
         return bosses
           .map((_, index) => index)
-          .filter((index) => state.profile.bossRecords[getBossRecordKey(index)]);
+          .filter((index) => bosses[index]?.active && state.profile.bossRecords[getBossRecordKey(index)]);
       }
 
       function syncMenuAmbientBosses() {
@@ -11919,6 +12100,21 @@
           };
           drawAlarmistBoss();
           state.alarmist = previous;
+        } else if (ambient.index === 11) {
+          const previous = state.slabhraidh;
+          state.slabhraidh = {
+            ...previous,
+            x: 0,
+            y: 0,
+            phase: 1,
+            rotation: time * (0.7 + ambient.speedX) + ambient.seed,
+            projectiles: [],
+            slicks: [],
+            fragments: [],
+            detachedBar: null
+          };
+          drawSlabhraidhBoss();
+          state.slabhraidh = previous;
         }
 
         ctx.restore();
@@ -14623,11 +14819,11 @@
 
       function getBleachCoreRadius() {
         const b = state.bleach;
-        return b.phase >= 5 ? 124 : b.phase >= 4 ? 108 : 94;
+        return b.phase >= 5 ? 130 : b.phase >= 4 ? 108 : 94;
       }
 
       function getBleachBondLength() {
-        return state.bleach.phase === 2 ? Math.min(width * 0.46, 380) : state.bleach.phase >= 4 ? 172 : 148;
+        return state.bleach.phase === 2 ? Math.min(width * 0.46, 380) : state.bleach.phase >= 5 ? 206 : state.bleach.phase >= 4 ? 172 : 148;
       }
 
       function getBleachNucleiStates() {
@@ -14655,6 +14851,7 @@
           vx: Math.cos(angle) * speed * (Math.random() > 0.5 ? 1 : -1),
           vy: Math.abs(Math.sin(angle) * speed) + 32,
           radius: 30 + Math.random() * 10,
+          hitRadius: 16 + Math.random() * 5,
           grow: 16 + Math.random() * 8,
           life: 6.6
         });
@@ -14849,7 +15046,7 @@
         const minX = 120;
         const maxX = width - 120;
         const minY = 110;
-        const maxY = b.phase >= 4 ? height * 0.62 : height * 0.3;
+        const maxY = b.phase === 3 ? height - 120 : b.phase >= 4 ? height * 0.62 : height * 0.3;
         b.driftTimer -= dt;
         if (b.phase >= 4) {
           b.targetX = centerX;
@@ -14928,16 +15125,8 @@
           const nuclei = getBleachNucleiStates();
           for (let idx = 0; idx < nuclei.length; idx++) {
             const nucleus = nuclei[idx];
-            let wallImpact = false;
             if (nucleus.x < nucleus.radius || nucleus.x > width - nucleus.radius) {
               b.vx *= -1;
-              wallImpact = true;
-            }
-            if (nucleus.y < nucleus.radius || nucleus.y > height - nucleus.radius) {
-              b.vy *= -1;
-              wallImpact = true;
-            }
-            if (wallImpact) {
               b.x = clamp(b.x, minX, maxX);
               b.y = clamp(b.y, minY, maxY);
               state.shake = Math.max(state.shake, 12);
@@ -14946,6 +15135,13 @@
                 b.wallShockwaveCooldown = 0.42;
                 spawnBleachRandomShockwave();
               }
+            }
+            if (nucleus.y < nucleus.radius || nucleus.y > height - nucleus.radius) {
+              b.vy *= -1;
+              b.x = clamp(b.x, minX, maxX);
+              b.y = clamp(b.y, minY, maxY);
+              state.shake = Math.max(state.shake, 12);
+              addFlash(nucleus.x, nucleus.y, "rgba(240,255,214,0.12)", 56);
             }
           }
         } else if (b.phase === 3) {
@@ -15091,9 +15287,10 @@
             projectile.x += projectile.vx * dt;
             projectile.y += projectile.vy * dt;
             projectile.radius += projectile.grow * dt;
+            projectile.hitRadius += projectile.grow * dt * 0.32;
             const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
             nearest = Math.min(nearest, dist);
-            if (dist < projectile.radius + player.hitRadius) damagePlayer(0.5, "corrosion");
+            if (dist < projectile.hitRadius + player.hitRadius) damagePlayer(0.5, "corrosion");
           } else if (projectile.type === "shard") {
             projectile.phase += dt * 9;
             const dirX = projectile.vx === 0 ? 1 : Math.sign(projectile.vx);
@@ -15439,6 +15636,686 @@
         ctx.beginPath();
         ctx.moveTo(-10, 0);
         ctx.lineTo(10, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function getSlabhraidhCoreRadius() {
+        const s = state.slabhraidh;
+        return s.phase >= 5 ? 128 : s.phase >= 4 ? 110 : s.phase >= 2 ? 98 : 92;
+      }
+
+      function getSlabhraidhBarLength() {
+        const s = state.slabhraidh;
+        const base = s.phase >= 4 ? 286 : s.phase >= 2 ? 248 : 228;
+        return base * (1 + s.extendAmount * 0.2);
+      }
+
+      function getSlabhraidhBarStates() {
+        const s = state.slabhraidh;
+        const bars = [];
+        const coreRadius = getSlabhraidhCoreRadius();
+        const length = getSlabhraidhBarLength();
+        const thickness = s.phase >= 4 ? 34 : 28;
+        const activeCount = s.phase === 3 ? 2 : s.phase >= 5 ? 0 : 3;
+        for (let i = 0; i < activeCount; i++) {
+          const sourceIndex = s.phase === 3 && i >= s.snappedBarIndex ? i + 1 : i;
+          const angle = s.rotation + sourceIndex * (TAU / 3);
+          const offset = coreRadius + length * 0.46;
+          bars.push({
+            index: sourceIndex,
+            x: s.x + Math.cos(angle) * offset,
+            y: s.y + Math.sin(angle) * offset,
+            rotation: angle,
+            length,
+            thickness
+          });
+        }
+        return bars;
+      }
+
+      function slabhraidhPointOnBar(bar, pointX, pointY, padding = 0) {
+        const dx = pointX - bar.x;
+        const dy = pointY - bar.y;
+        const cos = Math.cos(-bar.rotation);
+        const sin = Math.sin(-bar.rotation);
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+        return Math.abs(localX) <= bar.length * 0.5 + padding && Math.abs(localY) <= bar.thickness * 0.5 + padding;
+      }
+
+      function spawnSlabhraidhPelletBurst(bar) {
+        const count = 14;
+        const baseAngle = bar.rotation + Math.PI * 0.5;
+        for (let i = 0; i < count; i++) {
+          const t = count === 1 ? 0.5 : i / (count - 1);
+          const arc = -Math.PI * 0.52 + t * Math.PI * 1.04;
+          const angle = baseAngle + arc;
+          const lane = (t - 0.5) * bar.length * 0.72;
+          state.slabhraidh.projectiles.push({
+            type: "slab_pellet",
+            x: bar.x + Math.cos(bar.rotation) * lane,
+            y: bar.y + Math.sin(bar.rotation) * lane,
+            vx: Math.cos(angle) * 270,
+            vy: Math.sin(angle) * 270,
+            size: 9,
+            life: 6.6
+          });
+        }
+      }
+
+      function spawnSlabhraidhOilDrop() {
+        const targetY = 120 + Math.random() * Math.max(160, height * 0.62);
+        state.slabhraidh.projectiles.push({
+          type: "oil_drop",
+          x: 34 + Math.random() * Math.max(40, width - 68),
+          y: -18,
+          vx: (Math.random() - 0.5) * 42,
+          vy: 188 + Math.random() * 68,
+          radius: 12 + Math.random() * 6,
+          splatY: clamp(targetY, 96, height - 26),
+          life: 8.8
+        });
+      }
+
+      function spawnSlabhraidhSpiralBurst() {
+        const s = state.slabhraidh;
+        const bars = getSlabhraidhBarStates();
+        for (const bar of bars) {
+          for (let i = 0; i < 20; i++) {
+            const angle = s.rotation + (i / 20) * TAU + bar.index * 0.2;
+            const speed = 170 + i * 6;
+            s.projectiles.push({
+              type: "spiral_needle",
+              x: bar.x,
+              y: bar.y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              width: 18,
+              height: 5,
+              spin: (i % 2 === 0 ? 1 : -1) * 0.7,
+              angle,
+              life: 6
+            });
+          }
+        }
+      }
+
+      function spawnSlabhraidhHookBullets() {
+        const s = state.slabhraidh;
+        for (let i = 0; i < 4; i++) {
+          const angle = s.rotation + (i - 1.5) * 0.28;
+          s.projectiles.push({
+            type: "hook",
+            x: s.x,
+            y: s.y,
+            vx: Math.cos(angle) * 240,
+            vy: Math.sin(angle) * 240,
+            size: 10,
+            delay: 0.42 + i * 0.05,
+            turned: false,
+            life: 5.8
+          });
+        }
+      }
+
+      function spawnSlabhraidhPhase4Pattern() {
+        const s = state.slabhraidh;
+        for (let ring = 0; ring < 2; ring++) {
+          const count = 16 + ring * 6;
+          for (let i = 0; i < count; i++) {
+            const angle = s.rotation * (1.1 + ring * 0.1) + (i / count) * TAU;
+            const speed = 120 + ring * 22;
+            s.projectiles.push({
+              type: "fan_square",
+              x: s.x,
+              y: s.y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              size: 8 + ring * 2,
+              spin: (i % 2 === 0 ? 1 : -1) * (1.5 + ring * 0.35),
+              angle,
+              life: 6.4,
+              color: i % 3 === 0 ? "orange" : "white"
+            });
+          }
+        }
+      }
+
+      function spawnSlabhraidhSparkCloud() {
+        const s = state.slabhraidh;
+        for (let i = 0; i < 22; i++) {
+          const angle = Math.random() * TAU;
+          const speed = 90 + Math.random() * 170;
+          s.projectiles.push({
+            type: "spark",
+            x: s.x,
+            y: s.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 3 + Math.random() * 2,
+            jitter: Math.random() * TAU,
+            life: 5.6
+          });
+        }
+      }
+
+      function updateSlabhraidhBoss(dt) {
+        const s = state.slabhraidh;
+        const healthRatio = state.bossHealth / Math.max(1, state.bossMaxHealth);
+        const nextPhase = healthRatio > 0.8 ? 1 : healthRatio > 0.6 ? 2 : healthRatio > 0.4 ? 3 : healthRatio > 0.2 ? 4 : 5;
+        if (nextPhase !== s.phase) {
+          s.phase = nextPhase;
+          state.bossPhase = nextPhase;
+          s.projectiles.length = 0;
+          s.slicks.length = nextPhase === 1 ? s.slicks.length : Math.min(s.slicks.length, 4);
+          s.extendAmount = 0;
+          addFlash(s.x, s.y, "rgba(255,176,104,0.26)", 170 + nextPhase * 20);
+          addSpark(s.x, s.y, "rgba(255,188,120,0.94)", 28 + nextPhase * 5, 220);
+          if (nextPhase === 3) {
+            const snapAngle = s.rotation + s.snappedBarIndex * (TAU / 3);
+            const barLength = getSlabhraidhBarLength();
+            const coreRadius = getSlabhraidhCoreRadius();
+            const offset = coreRadius + barLength * 0.46;
+            s.detachedBar = {
+              x: s.x + Math.cos(snapAngle) * offset,
+              y: s.y + Math.sin(snapAngle) * offset,
+              vx: Math.cos(snapAngle) * 260,
+              vy: Math.sin(snapAngle) * 220,
+              rotation: snapAngle,
+              rotationSpeed: 2.8,
+              length: barLength,
+              thickness: 28,
+              mode: "bounce"
+            };
+          } else if (s.detachedBar && nextPhase > 3) {
+            s.detachedBar.mode = "fall";
+            s.detachedBar.vx *= 0.45;
+            s.detachedBar.vy = Math.abs(s.detachedBar.vy) + 180;
+          }
+          if (nextPhase === 5) {
+            s.vx = 0;
+            s.vy = 0;
+          }
+        }
+        state.bossPhase = s.phase;
+
+        s.rotation += dt * (s.phase === 1 ? 0.65 : s.phase === 2 ? 1.28 : s.phase === 3 ? 1.46 : s.phase === 4 ? 2.2 : 1.05);
+        s.beamSpin += dt * 1.1;
+        s.extendAmount += (0 - s.extendAmount) * Math.min(1, dt * 2.2);
+
+        if (s.phase === 1) {
+          s.driftTimer -= dt;
+          if (s.driftTimer <= 0 || Math.hypot(s.targetX - s.x, s.targetY - s.y) < 26) {
+            s.driftTimer = 0.42 + Math.random() * 0.55;
+            s.targetX = clamp(centerX + (Math.random() - 0.5) * width * 0.5, 180, width - 180);
+            s.targetY = clamp(height * 0.19 + Math.random() * height * 0.2, 108, height * 0.42);
+          }
+        } else if (s.phase === 2) {
+          s.targetX = clamp(player.x, 140, width - 140);
+          s.targetY = clamp(player.y - 180, 120, height * 0.34);
+        } else if (s.phase === 3) {
+          s.targetX = centerX + Math.sin(state.elapsed * 0.6) * Math.min(110, width * 0.12);
+          s.targetY = height * 0.24;
+        } else if (s.phase === 4) {
+          s.targetX = centerX;
+          s.targetY = height * 0.24;
+        } else {
+          s.targetX = centerX;
+          s.targetY = height * 0.22;
+        }
+
+        const driftForce = s.phase === 1 ? 2.65 : s.phase === 2 ? 2.4 : s.phase === 4 ? 1.8 : 1.9;
+        s.vx += (s.targetX - s.x) * dt * driftForce;
+        s.vy += (s.targetY - s.y) * dt * driftForce;
+        s.vx *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : 0.92;
+        s.vy *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : 0.92;
+        if (s.phase === 5) {
+          s.vx *= 0.74;
+          s.vy *= 0.74;
+        }
+        const bossBounds = s.phase === 1 ? 150 : 120;
+        s.x = clamp(s.x + s.vx * dt, bossBounds, width - bossBounds);
+        s.y = clamp(s.y + s.vy * dt, 96, height * 0.42);
+
+        s.pelletTimer -= dt;
+        s.oilTimer -= dt;
+        s.extendTimer -= dt;
+        s.hookTimer -= dt;
+        s.patternTimer -= dt;
+        s.sparkTimer -= dt;
+
+        if (s.phase === 1) {
+          if (s.pelletTimer <= 0) {
+            s.pelletTimer = 3.4 + Math.random() * 2.3;
+            for (const bar of getSlabhraidhBarStates()) spawnSlabhraidhPelletBurst(bar);
+          }
+          if (s.oilTimer <= 0) {
+            s.oilTimer = 0.18 + Math.random() * 0.12;
+            const burst = Math.random() < 0.55 ? 2 : 1;
+            for (let drop = 0; drop < burst; drop++) spawnSlabhraidhOilDrop();
+          }
+        } else if (s.phase === 2) {
+          if (s.extendTimer <= 0) {
+            s.extendTimer = 3 + Math.random() * 3;
+            s.extendAmount = 1;
+            spawnSlabhraidhSpiralBurst();
+          }
+          if (s.oilTimer <= 0) {
+            s.oilTimer = 1.15;
+            spawnSlabhraidhOilDrop();
+          }
+        } else if (s.phase === 3) {
+          if (s.hookTimer <= 0) {
+            s.hookTimer = 1.25;
+            spawnSlabhraidhHookBullets();
+          }
+          if (s.detachedBar) {
+            s.detachedBar.x += s.detachedBar.vx * dt;
+            s.detachedBar.y += s.detachedBar.vy * dt;
+            s.detachedBar.rotation += s.detachedBar.rotationSpeed * dt;
+            if (s.detachedBar.mode === "bounce") {
+              if (s.detachedBar.x < 60 || s.detachedBar.x > width - 60) s.detachedBar.vx *= -1;
+              if (s.detachedBar.y < 60 || s.detachedBar.y > height - 60) s.detachedBar.vy *= -1;
+            } else {
+              s.detachedBar.vy += 240 * dt;
+              if (s.detachedBar.y - s.detachedBar.length > height + 120) s.detachedBar = null;
+            }
+          }
+        } else if (s.phase === 4) {
+          if (s.patternTimer <= 0) {
+            s.patternTimer = 0.24;
+            spawnSlabhraidhPhase4Pattern();
+          }
+        } else {
+          if (!s.fragments.length) {
+            for (let i = 0; i < 140; i++) {
+              const angle = Math.random() * TAU;
+              const distance = 80 + Math.random() * Math.max(120, Math.min(width, height) * 0.45);
+              s.fragments.push({
+                x: s.x + Math.cos(angle) * distance,
+                y: s.y + Math.sin(angle) * distance,
+                size: 8 + Math.random() * 12,
+                rotation: Math.random() * TAU
+              });
+            }
+          }
+          if (s.sparkTimer <= 0) {
+            s.sparkTimer = 0.12;
+            spawnSlabhraidhSparkCloud();
+          }
+        }
+
+        for (let i = s.slicks.length - 1; i >= 0; i--) {
+          const slick = s.slicks[i];
+          slick.life -= dt;
+          slick.radius = Math.min(slick.maxRadius, slick.radius + slick.grow * dt);
+          if (slick.life <= 0) s.slicks.splice(i, 1);
+        }
+
+        let nearest = Infinity;
+        let closeCount = 0;
+        const coreRadius = getSlabhraidhCoreRadius();
+        const coreDist = Math.hypot(player.x - s.x, player.y - s.y);
+        nearest = Math.min(nearest, coreDist);
+        if (coreDist < coreRadius + player.hitRadius) damagePlayer(1, "impact");
+
+        const bars = getSlabhraidhBarStates();
+        for (const bar of bars) {
+          const dist = distanceToSegment(
+            player.x,
+            player.y,
+            bar.x - Math.cos(bar.rotation) * bar.length * 0.5,
+            bar.y - Math.sin(bar.rotation) * bar.length * 0.5,
+            bar.x + Math.cos(bar.rotation) * bar.length * 0.5,
+            bar.y + Math.sin(bar.rotation) * bar.length * 0.5
+          );
+          nearest = Math.min(nearest, dist);
+          if (dist < bar.thickness * 0.5 + player.hitRadius) damagePlayer(1, "impact");
+          if (s.phase >= 4) {
+            const beamDist = distanceToSegment(
+              player.x,
+              player.y,
+              bar.x - Math.cos(bar.rotation) * bar.length * 0.5,
+              bar.y - Math.sin(bar.rotation) * bar.length * 0.5,
+              bar.x + Math.cos(bar.rotation) * bar.length * 0.5,
+              bar.y + Math.sin(bar.rotation) * bar.length * 0.5
+            );
+            if (beamDist < 10 + player.hitRadius) damagePlayer(1, "impact");
+          }
+        }
+
+        if (s.detachedBar) {
+          const det = s.detachedBar;
+          const detDist = distanceToSegment(
+            player.x,
+            player.y,
+            det.x - Math.cos(det.rotation) * det.length * 0.5,
+            det.y - Math.sin(det.rotation) * det.length * 0.5,
+            det.x + Math.cos(det.rotation) * det.length * 0.5,
+            det.y + Math.sin(det.rotation) * det.length * 0.5
+          );
+          nearest = Math.min(nearest, detDist);
+          if (detDist < det.thickness * 0.5 + player.hitRadius) damagePlayer(1, "impact");
+        }
+
+        for (const slick of s.slicks) {
+          nearest = Math.min(nearest, Math.abs(Math.hypot(player.x - slick.x, player.y - slick.y) - slick.radius));
+        }
+
+        for (const fragment of s.fragments) {
+          const dist = Math.hypot(player.x - fragment.x, player.y - fragment.y);
+          nearest = Math.min(nearest, dist);
+          if (dist < fragment.size + player.hitRadius) damagePlayer(0.5, "impact");
+        }
+
+        for (let i = s.projectiles.length - 1; i >= 0; i--) {
+          const projectile = s.projectiles[i];
+          projectile.life -= dt;
+          if (projectile.type === "slab_pellet") {
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.size + player.hitRadius) damagePlayer(0.5, "impact");
+          } else if (projectile.type === "oil_drop") {
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.radius + player.hitRadius) damagePlayer(0.5, "impact");
+            if (projectile.y >= projectile.splatY) {
+              s.slicks.push({
+                x: projectile.x,
+                y: clamp(projectile.splatY, 82, height - 28),
+                radius: 30 + Math.random() * 12,
+                maxRadius: 102 + Math.random() * 42,
+                grow: 54,
+                life: 10.5
+              });
+              s.projectiles.splice(i, 1);
+              continue;
+            }
+          } else if (projectile.type === "spiral_needle") {
+            projectile.angle += projectile.spin * dt;
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.width * 0.5 + player.hitRadius) damagePlayer(1, "impact");
+          } else if (projectile.type === "hook") {
+            projectile.x += projectile.vx * dt;
+            projectile.y += projectile.vy * dt;
+            projectile.delay -= dt;
+            if (!projectile.turned && projectile.delay <= 0) {
+              projectile.turned = true;
+              const dx = player.x - projectile.x;
+              const dy = player.y - projectile.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              const angle = Math.atan2(projectile.vy, projectile.vx);
+              const targetAngle = Math.atan2(dy, dx);
+              const diff = Math.atan2(Math.sin(targetAngle - angle), Math.cos(targetAngle - angle));
+              const turn = diff >= 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+              const newAngle = angle + turn;
+              const speed = 260;
+              projectile.vx = Math.cos(newAngle) * speed;
+              projectile.vy = Math.sin(newAngle) * speed;
+            }
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.size + player.hitRadius) damagePlayer(1, "impact");
+          } else if (projectile.type === "fan_square") {
+            projectile.angle += projectile.spin * dt;
+            projectile.x += (projectile.vx + Math.cos(projectile.angle) * 16) * dt;
+            projectile.y += (projectile.vy + Math.sin(projectile.angle) * 16) * dt;
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.size + player.hitRadius) damagePlayer(0.5, "impact");
+          } else if (projectile.type === "spark") {
+            projectile.jitter += dt * 14;
+            projectile.x += projectile.vx * dt + Math.cos(projectile.jitter) * 10 * dt;
+            projectile.y += projectile.vy * dt + Math.sin(projectile.jitter * 1.2) * 10 * dt;
+            const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
+            nearest = Math.min(nearest, dist);
+            if (dist < projectile.size + player.hitRadius) damagePlayer(0.5, "impact");
+          }
+          if (projectile.life <= 0 || projectile.x < -240 || projectile.x > width + 240 || projectile.y < -240 || projectile.y > height + 240) {
+            s.projectiles.splice(i, 1);
+          }
+        }
+
+        applyThreatResponse(dt, nearest, closeCount);
+      }
+
+      function drawSlabhraidhBoss() {
+        const s = state.slabhraidh;
+        const coreRadius = getSlabhraidhCoreRadius();
+        const bars = getSlabhraidhBarStates();
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const aura = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, coreRadius * 3.1);
+        aura.addColorStop(0, s.phase >= 5 ? "rgba(255,236,214,0.18)" : "rgba(255,184,116,0.16)");
+        aura.addColorStop(0.48, "rgba(255,128,64,0.12)");
+        aura.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, coreRadius * 3.1, 0, TAU);
+        ctx.fill();
+
+        if (s.phase >= 4) {
+          for (let gear = 0; gear < 3; gear++) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(s.rotation * (gear % 2 === 0 ? 1 : -1) + gear);
+            ctx.strokeStyle = gear === 0 ? "rgba(255,196,124,0.32)" : "rgba(255,244,224,0.18)";
+            ctx.lineWidth = 6 - gear;
+            ctx.beginPath();
+            for (let tooth = 0; tooth < 16; tooth++) {
+              const angle = (tooth / 16) * TAU;
+              const r = coreRadius * (1.1 + gear * 0.16);
+              const x = Math.cos(angle) * r;
+              const y = Math.sin(angle) * r;
+              if (tooth === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        for (const bar of bars) {
+          ctx.save();
+          ctx.translate(bar.x, bar.y);
+          ctx.rotate(bar.rotation);
+          const metal = ctx.createLinearGradient(-bar.length * 0.5, 0, bar.length * 0.5, 0);
+          metal.addColorStop(0, "rgba(66,70,74,0.96)");
+          metal.addColorStop(0.5, "rgba(116,120,126,0.98)");
+          metal.addColorStop(1, "rgba(48,52,58,0.96)");
+          ctx.fillStyle = metal;
+          ctx.fillRect(-bar.length * 0.5, -bar.thickness * 0.5, bar.length, bar.thickness);
+          ctx.strokeStyle = "rgba(24,24,28,0.84)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-bar.length * 0.5, -bar.thickness * 0.5, bar.length, bar.thickness);
+          for (let tooth = 0; tooth < 7; tooth++) {
+            const t = (tooth / 6) - 0.5;
+            const x = t * bar.length * 0.88 + Math.sin(state.elapsed * 6 + tooth + bar.index) * 8;
+            ctx.fillStyle = tooth % 2 === 0 ? "rgba(255,168,82,0.9)" : "rgba(255,120,44,0.92)";
+            ctx.fillRect(x - 10, -bar.thickness * 0.22, 20, bar.thickness * 0.44);
+          }
+          if (s.phase >= 4) {
+            ctx.fillStyle = "rgba(255,156,78,0.18)";
+            ctx.fillRect(-bar.length * 0.5, -6, bar.length, 12);
+            ctx.fillStyle = "rgba(255,230,210,0.3)";
+            ctx.fillRect(-bar.length * 0.5, -2, bar.length, 4);
+          }
+          ctx.restore();
+        }
+
+        if (s.detachedBar) {
+          const det = s.detachedBar;
+          ctx.save();
+          ctx.translate(det.x, det.y);
+          ctx.rotate(det.rotation);
+          ctx.fillStyle = "rgba(88,92,98,0.94)";
+          ctx.fillRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
+          ctx.strokeStyle = "rgba(255,160,88,0.42)";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
+          for (let tooth = 0; tooth < 6; tooth++) {
+            const x = ((tooth / 5) - 0.5) * det.length * 0.86;
+            ctx.fillStyle = "rgba(255,168,82,0.88)";
+            ctx.fillRect(x - 9, -det.thickness * 0.2, 18, det.thickness * 0.4);
+          }
+          ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rotation * 0.35);
+        ctx.fillStyle = s.phase >= 5 ? "rgba(248,242,232,0.96)" : s.phase >= 4 ? "rgba(124,130,138,0.98)" : "rgba(86,92,100,0.98)";
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = -Math.PI * 0.5 + i * (TAU / 3);
+          const r = coreRadius;
+          const x = Math.cos(angle) * r;
+          const y = Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = s.phase >= 5 ? "rgba(255,170,96,0.72)" : "rgba(36,36,42,0.84)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        if (s.phase >= 5) {
+          for (let crack = 0; crack < 5; crack++) {
+            ctx.strokeStyle = crack % 2 === 0 ? "rgba(255,188,112,0.82)" : "rgba(255,236,220,0.5)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(crack * 1.3 + state.elapsed * 0.3) * coreRadius * 0.74, Math.sin(crack * 1.3 + state.elapsed * 0.3) * coreRadius * 0.74);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+        ctx.restore();
+      }
+
+      function drawSlabhraidhProjectiles() {
+        const s = state.slabhraidh;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (const slick of s.slicks) {
+          const puddle = ctx.createRadialGradient(slick.x, slick.y, 0, slick.x, slick.y, slick.radius * 1.25);
+          puddle.addColorStop(0, "rgba(48,48,52,0.42)");
+          puddle.addColorStop(0.6, "rgba(28,28,34,0.28)");
+          puddle.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = puddle;
+          ctx.beginPath();
+          ctx.arc(slick.x, slick.y, slick.radius * 1.25, 0, TAU);
+          ctx.fill();
+        }
+        for (const fragment of s.fragments) {
+          ctx.save();
+          ctx.translate(fragment.x, fragment.y);
+          ctx.rotate(fragment.rotation + state.elapsed);
+          ctx.fillStyle = "rgba(112,116,124,0.88)";
+          ctx.fillRect(-fragment.size, -fragment.size * 0.24, fragment.size * 2, fragment.size * 0.48);
+          ctx.restore();
+        }
+        for (const projectile of s.projectiles) {
+          ctx.save();
+          ctx.translate(projectile.x, projectile.y);
+          if (projectile.type === "slab_pellet") {
+            ctx.fillStyle = "rgba(255,168,82,0.94)";
+            ctx.fillRect(-projectile.size * 0.5, -projectile.size * 0.5, projectile.size, projectile.size);
+          } else if (projectile.type === "oil_drop") {
+            ctx.fillStyle = "rgba(106,106,112,0.9)";
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.radius, 0, TAU);
+            ctx.fill();
+          } else if (projectile.type === "spiral_needle") {
+            ctx.rotate(Math.atan2(projectile.vy, projectile.vx));
+            ctx.fillStyle = "rgba(255,180,92,0.94)";
+            ctx.fillRect(-projectile.width * 0.45, -projectile.height * 0.5, projectile.width, projectile.height);
+          } else if (projectile.type === "hook") {
+            ctx.rotate(Math.atan2(projectile.vy, projectile.vx));
+            ctx.fillStyle = "rgba(255,210,160,0.94)";
+            ctx.fillRect(-8, -4, 16, 8);
+            ctx.fillStyle = "rgba(255,150,62,0.9)";
+            ctx.fillRect(2, -10, 5, 20);
+          } else if (projectile.type === "fan_square") {
+            ctx.rotate(projectile.angle);
+            ctx.fillStyle = projectile.color === "orange" ? "rgba(255,164,76,0.92)" : "rgba(255,248,234,0.92)";
+            ctx.fillRect(-projectile.size * 0.5, -projectile.size * 0.5, projectile.size, projectile.size);
+          } else if (projectile.type === "spark") {
+            ctx.fillStyle = "rgba(255,186,94,0.92)";
+            ctx.fillRect(-projectile.size * 0.5, -projectile.size * 0.5, projectile.size, projectile.size);
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      function drawSlabhraidhPreview(ctxPreview, time) {
+        const cx = 64;
+        const cy = 64;
+        const coreRadius = 20;
+        for (let i = 0; i < 3; i++) {
+          const angle = time * 0.8 + i * (TAU / 3);
+          const x = cx + Math.cos(angle) * 28;
+          const y = cy + Math.sin(angle) * 28;
+          ctxPreview.save();
+          ctxPreview.translate(x, y);
+          ctxPreview.rotate(angle);
+          ctxPreview.fillStyle = "rgba(92,96,104,0.96)";
+          ctxPreview.fillRect(-24, -6, 48, 12);
+          for (let tooth = 0; tooth < 3; tooth++) {
+            ctxPreview.fillStyle = "rgba(255,170,82,0.9)";
+            ctxPreview.fillRect(-16 + tooth * 12, -3, 8, 6);
+          }
+          ctxPreview.restore();
+        }
+        ctxPreview.save();
+        ctxPreview.translate(cx, cy);
+        ctxPreview.rotate(time * 0.25);
+        ctxPreview.fillStyle = "rgba(104,110,118,0.98)";
+        ctxPreview.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = -Math.PI * 0.5 + i * (TAU / 3);
+          const x = Math.cos(angle) * coreRadius;
+          const y = Math.sin(angle) * coreRadius;
+          if (i === 0) ctxPreview.moveTo(x, y);
+          else ctxPreview.lineTo(x, y);
+        }
+        ctxPreview.closePath();
+        ctxPreview.fill();
+        ctxPreview.restore();
+      }
+
+      function drawSlabhraidhSigil(progress) {
+        const alpha = clamp(progress * 1.15, 0, 1);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(progress * 0.5);
+        ctx.strokeStyle = `rgba(255,184,104,${0.2 + alpha * 0.36})`;
+        ctx.lineWidth = 6;
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate(i * (TAU / 3));
+          ctx.strokeRect(18, -10, 150, 20);
+          ctx.restore();
+        }
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = -Math.PI * 0.5 + i * (TAU / 3);
+          const x = Math.cos(angle) * 84;
+          const y = Math.sin(angle) * 84;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
         ctx.stroke();
         ctx.restore();
       }
@@ -16365,6 +17242,8 @@
           ? "Bleach"
           : state.currentBoss === "alarmist"
           ? "Alarmist"
+          : state.currentBoss === "slabhraidh"
+          ? "Slabhraidh"
           : "Hertz's Harmony";
         bossValue.textContent = `${bossLabel} P${state.bossPhase} - ${bossPercent}%`;
         bossFill.style.width = `${bossPercent}%`;
@@ -16465,6 +17344,8 @@
           drawBleachBoss();
         } else if (state.currentBoss === "alarmist" && ["playing", "paused", "gameover", "victory"].includes(state.mode)) {
           drawAlarmistBoss();
+        } else if (state.currentBoss === "slabhraidh" && ["playing", "paused", "gameover", "victory"].includes(state.mode)) {
+          drawSlabhraidhBoss();
         } else if (state.mode === "loading") {
           // Keep loading visuals isolated to the overlay shell.
         } else if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
@@ -16500,6 +17381,8 @@
             drawBleachSigil(progress);
           } else if (state.currentBoss === "alarmist") {
             drawAlarmistSigil(progress);
+          } else if (state.currentBoss === "slabhraidh") {
+            drawSlabhraidhSigil(progress);
           } else {
             drawArchitectSigil(progress);
           }
@@ -16768,6 +17651,18 @@
               }
             }
             ctx.restore();
+          } else if (state.victoryBoss === "slabhraidh") {
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            for (const fragment of state.slabhraidh.fragments) {
+              ctx.save();
+              ctx.translate(fragment.x, fragment.y);
+              ctx.rotate(fragment.rotation + state.victoryTime * 2.4);
+              ctx.fillStyle = fragment.color;
+              ctx.fillRect(-fragment.size, -fragment.size * 0.24, fragment.size * 2, fragment.size * 0.48);
+              ctx.restore();
+            }
+            ctx.restore();
           } else {
             drawArchitectSigil(0.8 + bloom * 0.7);
           }
@@ -16795,6 +17690,8 @@
             drawBleachProjectiles();
           } else if (state.currentBoss === "alarmist") {
             drawAlarmistProjectiles();
+          } else if (state.currentBoss === "slabhraidh") {
+            drawSlabhraidhProjectiles();
           }
           drawXlMissiles();
           drawPlayerShots();
