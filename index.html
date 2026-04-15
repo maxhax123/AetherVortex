@@ -2580,6 +2580,32 @@
           accent: "rgba(255, 241, 212, 0.99)"
         }
       };
+      const primaryBulletDefs = {
+        signal_standard: {
+          name: "Signal Standard",
+          desc: "Your baseline bullet stream. Reliable direct-fire rounds with no special gimmicks.",
+          priceCents: 0,
+          type: "signal_standard"
+        },
+        spark_targets: {
+          name: "Spark-Targets",
+          desc: "Tiny rotating stars that home onto the boss, but each hit only deals 10% of normal bullet damage.",
+          priceCents: 5499,
+          type: "spark_targets"
+        },
+        orbital_strike: {
+          name: "Orbital Strike",
+          desc: "Your plane charges for 1.7 seconds, then launches heavy missile rounds that hit for 8x normal bullet damage.",
+          priceCents: 8299,
+          type: "orbital_strike"
+        },
+        tick_phaser: {
+          name: "Tick Phaser",
+          desc: "Triangular phasing shots that hit slightly softer on contact, then keep ticking damage every 0.4 seconds while overlapping the boss.",
+          priceCents: 6899,
+          type: "tick_phaser"
+        }
+      };
       const achievementDefs = {
         architect_down: { title: "Harmony Broken", desc: "Defeat Hertz's Harmony." },
         sovereign_down: { title: "Sovereign Split", desc: "Defeat the Protium Sovereign." },
@@ -2739,9 +2765,18 @@
             ember_swarm: Boolean(source.shop?.ownedXlBullets?.ember_swarm),
             superspear: Boolean(source.shop?.ownedXlBullets?.superspear)
           },
+          ownedPrimaryBullets: {
+            signal_standard: true,
+            spark_targets: Boolean(source.shop?.ownedPrimaryBullets?.spark_targets),
+            orbital_strike: Boolean(source.shop?.ownedPrimaryBullets?.orbital_strike),
+            tick_phaser: Boolean(source.shop?.ownedPrimaryBullets?.tick_phaser)
+          },
           selectedXlBullet: (source.shop?.ownedXlBullets?.[source.shop?.selectedXlBullet] || ["twin_hunter", "split_comet"].includes(source.shop?.selectedXlBullet))
             ? source.shop.selectedXlBullet
             : "twin_hunter",
+          selectedPrimaryBullet: (source.shop?.ownedPrimaryBullets?.[source.shop?.selectedPrimaryBullet] || source.shop?.selectedPrimaryBullet === "signal_standard")
+            ? source.shop.selectedPrimaryBullet
+            : "signal_standard",
           maxEvolutionTier: Number.isFinite(source.shop?.maxEvolutionTier)
             ? clamp(Math.round(source.shop.maxEvolutionTier), 4, 7)
             : 4
@@ -2810,6 +2845,7 @@
         bullets: [],
         playerShots: [],
         xlMissiles: [],
+        primaryCharge: null,
         sparks: [],
         flashes: [],
         spawnTimer: 0,
@@ -3154,15 +3190,21 @@
           targetY: 0,
           driftTimer: 0,
           pelletTimer: 0,
+          pelletChainCount: 0,
+          pelletChainTimer: 0,
           oilTimer: 0,
           extendTimer: 0,
+          extendChainCount: 0,
+          extendChainTimer: 0,
           extendAmount: 0,
           hookTimer: 0,
           patternTimer: 0,
+          phase4DetachTimer: 0,
           sparkTimer: 0,
           beamSpin: 0,
           snappedBarIndex: 2,
           detachedBar: null,
+          phase4DetachedBars: [],
           projectiles: [],
           slicks: [],
           fragments: []
@@ -3829,6 +3871,10 @@
         return state.profile.shop?.ownedXlBullets || { twin_hunter: true, split_comet: true };
       }
 
+      function getOwnedPrimaryBullets() {
+        return state.profile.shop?.ownedPrimaryBullets || { signal_standard: true };
+      }
+
       function getMaxEvolutionTier() {
         return clamp(state.profile.shop?.maxEvolutionTier || 4, 4, 7);
       }
@@ -3869,6 +3915,26 @@
         }
         state.profile.shop.ownedXlBullets[id] = true;
         state.profile.shop.selectedXlBullet = id;
+        awardAchievement("arsenal_tuned");
+        saveProfile();
+      }
+
+      function setPrimaryBulletLoadout(id) {
+        if (!getOwnedPrimaryBullets()[id]) return;
+        state.profile.shop.selectedPrimaryBullet = id;
+        saveProfile();
+      }
+
+      function purchasePrimaryBullet(id) {
+        const meta = primaryBulletDefs[id];
+        if (!meta || meta.priceCents <= 0 || getOwnedPrimaryBullets()[id]) return;
+        if (!spendOperationsFunds(meta.priceCents)) {
+          state.operationsFeedback = `Insufficient Operations funds for ${meta.name}.`;
+          state.operationsFeedbackTone = "negative";
+          return;
+        }
+        state.profile.shop.ownedPrimaryBullets[id] = true;
+        state.profile.shop.selectedPrimaryBullet = id;
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -4719,7 +4785,7 @@
       }
 
       function getBossPreviewMarkup(index, animated = false) {
-        if (index <= 10) {
+        if (index <= 11) {
           return `<div class="boss-preview ${animated ? "animated" : ""}"><canvas class="boss-preview-canvas" width="128" height="128" data-boss-preview="${index}" data-boss-animated="${animated ? "true" : "false"}"></canvas></div>`;
         }
         return `<div class="fractal-glyph"></div>`;
@@ -4906,9 +4972,12 @@
         const selectedMeta = getAttackLoadoutMeta(selected);
         const selectedXl = state.profile.shop?.selectedXlBullet || "twin_hunter";
         const selectedXlMeta = xlBulletDefs[selectedXl] || xlBulletDefs.twin_hunter;
+        const selectedPrimary = state.profile.shop?.selectedPrimaryBullet || "signal_standard";
+        const selectedPrimaryMeta = primaryBulletDefs[selectedPrimary] || primaryBulletDefs.signal_standard;
         const funds = state.profile.operations?.cents || 0;
         const ownedUltimates = getOwnedUltimates();
         const ownedXlBullets = getOwnedXlBullets();
+        const ownedPrimaryBullets = getOwnedPrimaryBullets();
         const ultimateMarkup = Object.entries(attackLoadoutDefs).map(([id, meta]) => {
           const owned = Boolean(ownedUltimates[id]);
           const selectedClass = selected === id ? "active" : "";
@@ -4953,6 +5022,28 @@
             </article>
           `;
         }).join("");
+        const primaryMarkup = Object.entries(primaryBulletDefs).map(([id, meta]) => {
+          const owned = Boolean(ownedPrimaryBullets[id]);
+          const selectedClass = selectedPrimary === id ? "active" : "";
+          const priceLabel = meta.priceCents > 0 ? formatMoney(meta.priceCents) : "Included";
+          const actionMarkup = owned
+            ? `<button class="config-toggle ${selectedPrimary === id ? "active" : ""}" data-primary-loadout="${id}">${selectedPrimary === id ? "Equipped" : "Equip"}</button>`
+            : `<button class="config-toggle" data-shop-buy-primary="${id}" ${funds < meta.priceCents ? "disabled" : ""}>Buy ${priceLabel}</button>`;
+          return `
+            <article class="config-card">
+              <div class="title">${meta.priceCents > 0 ? "Premium Bullet Type" : "Core Bullet Type"}</div>
+              <div class="value" style="font-size: 24px;">${meta.name}</div>
+              <p class="boss-card-copy" style="margin: 14px 0 18px;">${meta.desc}</p>
+              <div class="config-actions">
+                <button class="attack-option ${selectedClass}" data-primary-loadout="${id}" ${owned ? "" : "disabled"}>
+                  <strong>${owned ? (selectedPrimary === id ? "Selected" : "Owned") : "Locked"}</strong>
+                </button>
+                ${actionMarkup}
+              </div>
+              <div class="menu-footer" style="text-align:left; margin-top:10px;">${owned ? "Owned and ready for deployment." : `Unlock price ${priceLabel}.`}</div>
+            </article>
+          `;
+        }).join("");
         const evolutionMarkup = Array.from({ length: 4 }, (_, index) => {
           const tier = index + 4;
           const owned = tier <= getMaxEvolutionTier();
@@ -4979,7 +5070,7 @@
           <div class="menu-shell">
             <div>
               <h1 class="menu-title" style="font-size: clamp(30px, 6vw, 70px);">Shop</h1>
-              <div class="menu-subtitle">Purchase premium ultimates and raise your plane evolution ceiling</div>
+              <div class="menu-subtitle">Purchase premium bullet types, ultimates, XL attacks, and raise your plane evolution ceiling</div>
             </div>
             <div class="config-grid">
               <section class="config-card">
@@ -5006,6 +5097,11 @@
                 <p class="menu-footer" style="text-align:left; margin-top:16px;">
                   ${selectedXlMeta.desc}
                 </p>
+                <div class="title" style="margin-top:18px;">Current Bullet Type</div>
+                <div class="value" style="font-size: 22px;">${selectedPrimaryMeta.name}</div>
+                <p class="menu-footer" style="text-align:left; margin-top:16px;">
+                  ${selectedPrimaryMeta.desc}
+                </p>
               </section>
             </div>
             <div class="config-grid" style="margin-top: 20px;">
@@ -5016,6 +5112,12 @@
               <section class="config-card">
                 <div class="title">XL Bullets</div>
                 <div class="shop-grid">${xlMarkup}</div>
+              </section>
+            </div>
+            <div class="config-grid" style="margin-top: 20px;">
+              <section class="config-card">
+                <div class="title">Bullet Types</div>
+                <div class="shop-grid">${primaryMarkup}</div>
               </section>
             </div>
             <div class="config-grid" style="margin-top: 20px;">
@@ -5389,15 +5491,21 @@
           targetY: height * 0.23,
           driftTimer: 0.9,
           pelletTimer: 1.6,
+          pelletChainCount: 0,
+          pelletChainTimer: 0,
           oilTimer: 0.45,
           extendTimer: 2.8,
+          extendChainCount: 0,
+          extendChainTimer: 0,
           extendAmount: 0,
           hookTimer: 1.2,
           patternTimer: 0.24,
+          phase4DetachTimer: 1.9,
           sparkTimer: 0.08,
           beamSpin: 0,
           snappedBarIndex: 2,
           detachedBar: null,
+          phase4DetachedBars: [],
           projectiles: [],
           slicks: [],
           fragments: []
@@ -5463,6 +5571,7 @@
         state.bullets.length = 0;
         state.playerShots.length = 0;
         state.xlMissiles.length = 0;
+        state.primaryCharge = null;
         state.sparks.length = 0;
         state.flashes.length = 0;
         state.spawnTimer = 0;
@@ -5821,6 +5930,7 @@
         state.slabhraidh.projectiles.length = 0;
         state.slabhraidh.slicks.length = 0;
         state.slabhraidh.detachedBar = null;
+        state.slabhraidh.phase4DetachedBars.length = 0;
         state.slabhraidh.fragments.length = 0;
       }
 
@@ -6279,6 +6389,53 @@
         if (player.health <= 0) {
           onGameOver();
         }
+      }
+
+      function getSelectedPrimaryBulletMeta() {
+        const id = state.profile.shop?.selectedPrimaryBullet || "signal_standard";
+        return primaryBulletDefs[id] || primaryBulletDefs.signal_standard;
+      }
+
+      function createPlayerShot(x, y, angle, speed, life, size, damage, extras = {}) {
+        state.playerShots.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life,
+          size,
+          damage,
+          immuneEnvironmental: false,
+          type: "signal_standard",
+          rotation: 0,
+          rotationSpeed: 0,
+          phasesHazards: false,
+          initialDamage: damage,
+          tickDamage: damage,
+          tickTimer: 0.4,
+          tickInterval: 0.4,
+          hasInitialImpact: false,
+          ...extras
+        });
+      }
+
+      function releaseOrbitalStrikeCharge() {
+        if (!state.primaryCharge || state.primaryCharge.type !== "orbital_strike") return;
+        const charge = state.primaryCharge;
+        const muzzleX = player.x + Math.cos(player.angle) * 18;
+        const muzzleY = player.y + Math.sin(player.angle) * 18;
+        for (const angle of charge.angles) {
+          createPlayerShot(muzzleX, muzzleY, angle, 760, 2.4, charge.size, charge.damage, {
+            type: "orbital_strike",
+            missileStyle: true,
+            immuneEnvironmental: charge.immuneEnvironmental,
+            rotation: angle,
+            rotationSpeed: 0
+          });
+        }
+        addFlash(muzzleX, muzzleY, "rgba(255, 186, 102, 0.42)", 72);
+        addSpark(muzzleX, muzzleY, "rgba(255, 235, 205, 0.96)", 16, 180);
+        state.primaryCharge = null;
       }
 
       function spawnSovereignBeam() {
@@ -10139,6 +10296,7 @@
           state.slabhraidh.projectiles.length = 0;
           state.slabhraidh.slicks.length = 0;
           state.slabhraidh.detachedBar = null;
+          state.slabhraidh.phase4DetachedBars.length = 0;
           state.slabhraidh.fragments.length = 0;
           state.victoryProjectilesCleared = true;
         }
@@ -10331,6 +10489,7 @@
         state.slabhraidh.slicks.length = 0;
         state.slabhraidh.fragments.length = 0;
         state.slabhraidh.detachedBar = null;
+        state.slabhraidh.phase4DetachedBars.length = 0;
         renderMainMenu();
       }
 
@@ -10535,20 +10694,52 @@
         const codeBoost = rootActive ? 1.3 : macroActive ? 1.18 : 1;
         const shotDamage = (1 + (level - 1) * 0.45) * player.damageMultiplier * (bruteforceActive ? 1.15 : 1) * codeBoost;
         const shotLife = focusedFire ? (focusLife[level] || 1.2) : 1.2;
+        const primaryMeta = getSelectedPrimaryBulletMeta();
+        if (primaryMeta.type === "orbital_strike") {
+          if (!state.primaryCharge) {
+            state.primaryCharge = {
+              type: "orbital_strike",
+              timer: 1.7,
+              angles: shotOffsets.map((offset) => player.angle + offset),
+              damage: shotDamage * 8,
+              size: Math.max(4.8, (3 + level * 0.4) * 1.5),
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive
+            };
+            addFlash(player.x, player.y, "rgba(255, 180, 94, 0.22)", 52);
+            addSpark(muzzleX, muzzleY, "rgba(255, 210, 148, 0.95)", 8 + level, 108);
+          }
+          return 1.78;
+        }
         for (const offset of shotOffsets) {
           const angle = player.angle + offset;
-          state.playerShots.push({
-            x: muzzleX,
-            y: muzzleY,
-            vx: Math.cos(angle) * 620,
-            vy: Math.sin(angle) * 620,
-            life: shotLife,
-            size: (3 + level * 0.32) * (bruteforceActive ? 1.1 : 1) * (rootActive ? 1.08 : 1),
-            damage: shotDamage,
-            immuneEnvironmental: bruteforceActive || macroActive || rootActive
-          });
+          const baseSize = (3 + level * 0.32) * (bruteforceActive ? 1.1 : 1) * (rootActive ? 1.08 : 1);
+          if (primaryMeta.type === "spark_targets") {
+            createPlayerShot(muzzleX, muzzleY, angle, 440, shotLife * 1.25, Math.max(2.8, baseSize * 0.86), shotDamage * 0.1, {
+              type: "spark_targets",
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: state.elapsed * 8 + offset * 12,
+              rotationSpeed: 8.5
+            });
+          } else if (primaryMeta.type === "tick_phaser") {
+            createPlayerShot(muzzleX, muzzleY, angle, 560, shotLife * 1.45, Math.max(3.2, baseSize * 1.02), shotDamage * 0.9, {
+              type: "tick_phaser",
+              initialDamage: shotDamage * 0.9,
+              tickDamage: shotDamage * 1.2,
+              tickTimer: 0.4,
+              tickInterval: 0.4,
+              phasesHazards: true,
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: angle,
+              rotationSpeed: 0
+            });
+          } else {
+            createPlayerShot(muzzleX, muzzleY, angle, 620, shotLife, baseSize, shotDamage, {
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive
+            });
+          }
         }
         addSpark(muzzleX, muzzleY, "rgba(255, 215, 106, 0.95)", 6 + level, 100);
+        return null;
       }
 
       function getSlabhraidhSlickControl() {
@@ -10557,7 +10748,7 @@
         }
         for (const slick of state.slabhraidh.slicks) {
           if (Math.hypot(player.x - slick.x, player.y - slick.y) < slick.radius + player.hitRadius) {
-            return { move: 0.82, turn: 0.7, damping: 1.45 };
+            return { move: 0.68, turn: 0.52, damping: 0.7 };
           }
         }
         return { move: 1, turn: 1, damping: 4.4 };
@@ -10614,12 +10805,19 @@
         player.x = clamp(player.x, 30, width - 30);
         player.y = clamp(player.y, 30, height - 30);
 
+        if (state.primaryCharge) {
+          state.primaryCharge.timer -= dt;
+          if (state.primaryCharge.timer <= 0) {
+            releaseOrbitalStrikeCharge();
+          }
+        }
+
         state.shotTimer -= dt;
         if (state.mode === "playing" && state.shotTimer <= 0) {
-          spawnPlayerShots();
+          const customCooldown = spawnPlayerShots();
           const fireRateBoost = rootActive ? 0.03 : macroActive ? 0.02 : 0;
           const beautyFireRate = getBeautyFireRateModifier();
-          state.shotTimer = Math.max(0.04, (player.weaponBaseCooldown - player.evolutionLevel * 0.01 - fireRateBoost) / beautyFireRate);
+          state.shotTimer = customCooldown ?? Math.max(0.04, (player.weaponBaseCooldown - player.evolutionLevel * 0.01 - fireRateBoost) / beautyFireRate);
         }
       }
 
@@ -10709,6 +10907,42 @@
         const bossHitRadius = bossTarget.radius;
         for (let i = state.playerShots.length - 1; i >= 0; i--) {
           const shot = state.playerShots[i];
+          let tickTouching = false;
+          if (shot.type === "spark_targets") {
+            const toBossX = bossPos.x - shot.x;
+            const toBossY = bossPos.y - shot.y;
+            const distance = Math.hypot(toBossX, toBossY) || 1;
+            const desiredVx = (toBossX / distance) * 440;
+            const desiredVy = (toBossY / distance) * 440;
+            const steer = Math.min(1, dt * 4.8);
+            shot.vx += (desiredVx - shot.vx) * steer;
+            shot.vy += (desiredVy - shot.vy) * steer;
+            const speed = Math.hypot(shot.vx, shot.vy) || 1;
+            shot.vx = (shot.vx / speed) * 440;
+            shot.vy = (shot.vy / speed) * 440;
+            shot.rotation += shot.rotationSpeed * dt;
+          } else if (shot.type === "tick_phaser" || shot.type === "orbital_strike") {
+            shot.rotation = Math.atan2(shot.vy, shot.vx);
+          }
+
+          const applyTickPhaserContact = (sparkColor) => {
+            if (shot.type !== "tick_phaser") return false;
+            tickTouching = true;
+            if (!shot.hasInitialImpact) {
+              damageBoss(shot.initialDamage);
+              shot.hasInitialImpact = true;
+              shot.tickTimer = shot.tickInterval;
+              addSpark(shot.x, shot.y, sparkColor, 5, 100);
+            } else {
+              shot.tickTimer -= dt;
+              if (shot.tickTimer <= 0) {
+                damageBoss(shot.tickDamage);
+                shot.tickTimer = shot.tickInterval;
+                addSpark(shot.x, shot.y, sparkColor, 4, 84);
+              }
+            }
+            return true;
+          };
           if (state.currentBoss === "cesium") {
             const shotPull = getCesiumMagnetPullAt(shot.x, shot.y, shot.size + 2);
             if (shotPull) {
@@ -10725,6 +10959,7 @@
           } else if (state.currentBoss === "tantalum") {
             for (const panel of getTantalumPanelStates()) {
               if (Math.abs(shot.x - panel.x) < panel.width * 0.6 + shot.size && Math.abs(shot.y - panel.y) < panel.height * 0.7 + shot.size) {
+                if (shot.phasesHazards) continue;
                 damageBoss(0.5);
                 addSpark(shot.x, shot.y, "rgba(146, 245, 255, 0.95)", 7, 115);
                 state.playerShots.splice(i, 1);
@@ -10737,6 +10972,7 @@
             let clippedBarrier = false;
             for (const barrier of state.luminosity.barriers) {
               if (Math.abs(shot.x - barrier.x) < barrier.width * 0.5 + shot.size && Math.abs(shot.y - barrier.y) < barrier.height * 0.5 + shot.size) {
+                if (shot.phasesHazards) continue;
                 addSpark(shot.x, shot.y, "rgba(255, 120, 120, 0.95)", 6, 110);
                 state.playerShots.splice(i, 1);
                 clippedBarrier = true;
@@ -10750,19 +10986,25 @@
             for (const unit of [siliUnits.unitA, siliUnits.unitB]) {
               const dist = Math.hypot(shot.x - unit.x, shot.y - unit.y);
               if (dist < unit.size + shot.size + 2) {
-                damageBoss(shot.damage);
-                addSpark(shot.x, shot.y, unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)", 6, 120);
-                state.playerShots.splice(i, 1);
+                const sparkColor = unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)";
+                if (shot.type === "tick_phaser") {
+                  applyTickPhaserContact(sparkColor);
+                } else {
+                  damageBoss(shot.damage);
+                  addSpark(shot.x, shot.y, sparkColor, 6, 120);
+                  state.playerShots.splice(i, 1);
+                }
                 hitSili = true;
                 break;
               }
             }
-            if (hitSili) continue;
+            if (hitSili && shot.type !== "tick_phaser") continue;
           } else if (state.currentBoss === "caesar") {
             let hitCaesar = false;
             for (const rail of getCaesarRailStates()) {
               const railDist = Math.hypot(shot.x - rail.x, shot.y - rail.y);
               if (railDist < rail.thickness + shot.size + 3) {
+                if (shot.phasesHazards) continue;
                 damageBoss(0.5);
                 addSpark(shot.x, shot.y, "rgba(214, 255, 224, 0.96)", 6, 120);
                 if (state.caesar.railCounterCooldowns[rail.index] <= 0) {
@@ -10780,9 +11022,13 @@
             for (const nucleus of getBleachNucleiStates()) {
               const nucleusDist = Math.hypot(shot.x - nucleus.x, shot.y - nucleus.y);
               if (nucleusDist < nucleus.radius + shot.size + 2) {
-                damageBoss(shot.damage);
-                addSpark(shot.x, shot.y, "rgba(238, 255, 224, 0.96)", 6, 120);
-                if (state.bleach.phase === 3) {
+                if (shot.type === "tick_phaser") {
+                  applyTickPhaserContact("rgba(238, 255, 224, 0.96)");
+                } else {
+                  damageBoss(shot.damage);
+                  addSpark(shot.x, shot.y, "rgba(238, 255, 224, 0.96)", 6, 120);
+                }
+                if (state.bleach.phase === 3 && shot.type !== "tick_phaser") {
                   const pushDx = nucleus.x - player.x;
                   const pushDy = nucleus.y - player.y;
                   const pushDist = Math.hypot(pushDx, pushDy) || 1;
@@ -10790,16 +11036,17 @@
                   state.bleach.vy += (pushDy / pushDist) * 24;
                   addFlash(nucleus.x, nucleus.y, "rgba(238,255,210,0.16)", 46);
                 }
-                state.playerShots.splice(i, 1);
+                if (shot.type !== "tick_phaser") state.playerShots.splice(i, 1);
                 hitBleach = true;
                 break;
               }
             }
-            if (hitBleach) continue;
+            if (hitBleach && shot.type !== "tick_phaser") continue;
           } else if (state.currentBoss === "slabhraidh") {
             let hitSlabhraidh = false;
             for (const bar of getSlabhraidhBarStates()) {
               if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2)) {
+                if (shot.phasesHazards) continue;
                 damageBoss(0.5);
                 addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
                 state.playerShots.splice(i, 1);
@@ -10807,19 +11054,36 @@
                 break;
               }
             }
+            if (!hitSlabhraidh) {
+              for (const det of state.slabhraidh.phase4DetachedBars) {
+                if (slabhraidhPointOnBar(det, shot.x, shot.y, shot.size + 2)) {
+                  if (shot.phasesHazards) continue;
+                  damageBoss(0.5);
+                  addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+                  state.playerShots.splice(i, 1);
+                  hitSlabhraidh = true;
+                  break;
+                }
+              }
+            }
             if (!hitSlabhraidh && state.slabhraidh.detachedBar && slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2)) {
+              if (shot.phasesHazards) continue;
               damageBoss(0.5);
               addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
               state.playerShots.splice(i, 1);
               hitSlabhraidh = true;
             }
             if (!hitSlabhraidh && Math.hypot(shot.x - state.slabhraidh.x, shot.y - state.slabhraidh.y) < getSlabhraidhCoreRadius() + shot.size + 2) {
-              damageBoss(shot.damage);
-              addSpark(shot.x, shot.y, "rgba(255, 210, 150, 0.96)", 6, 120);
-              state.playerShots.splice(i, 1);
+              if (shot.type === "tick_phaser") {
+                applyTickPhaserContact("rgba(255, 210, 150, 0.96)");
+              } else {
+                damageBoss(shot.damage);
+                addSpark(shot.x, shot.y, "rgba(255, 210, 150, 0.96)", 6, 120);
+                state.playerShots.splice(i, 1);
+              }
               hitSlabhraidh = true;
             }
-            if (hitSlabhraidh) continue;
+            if (hitSlabhraidh && shot.type !== "tick_phaser") continue;
           }
           shot.x += shot.vx * dt;
           shot.y += shot.vy * dt;
@@ -10913,6 +11177,7 @@
             let hitAlarmBlade = false;
             for (const blade of getAlarmistBladeStates()) {
               if (alarmistBladeContainsPoint(blade, shot.x, shot.y, shot.size + 2)) {
+                if (shot.phasesHazards) continue;
                 addSpark(shot.x, shot.y, "rgba(255, 194, 132, 0.92)", 4, 92);
                 state.playerShots.splice(i, 1);
                 hitAlarmBlade = true;
@@ -10923,13 +11188,17 @@
             const coreHitRadius = getAlarmistCoreRadius() + shot.size;
             const coreDist = distanceToSegment(state.alarmist.x, state.alarmist.y, prevShotX, prevShotY, shot.x, shot.y);
             if (coreDist < coreHitRadius) {
-              damageBoss(shot.damage);
-              if (state.alarmist.hitFxCooldown <= 0) {
+              if (shot.type === "tick_phaser") {
+                applyTickPhaserContact("rgba(255, 220, 184, 0.9)");
+              } else {
+                damageBoss(shot.damage);
+              }
+              if (shot.type !== "tick_phaser" && state.alarmist.hitFxCooldown <= 0) {
                 addSpark(shot.x, shot.y, "rgba(255, 220, 184, 0.9)", 4, 96);
                 state.alarmist.hitFxCooldown = 0.05;
               }
-              state.playerShots.splice(i, 1);
-              continue;
+              if (shot.type !== "tick_phaser") state.playerShots.splice(i, 1);
+              if (shot.type !== "tick_phaser") continue;
             }
           }
 
@@ -10943,11 +11212,22 @@
               triggerTantalumRetaliation(player.x, player.y);
               addFlash(shot.x, shot.y, "rgba(196, 252, 255, 0.55)", 44);
             } else {
-              damageBoss(shot.damage);
+              if (shot.type === "tick_phaser") {
+                applyTickPhaserContact("rgba(255, 215, 106, 0.95)");
+              } else {
+                damageBoss(shot.damage);
+              }
             }
-            addSpark(shot.x, shot.y, "rgba(255, 215, 106, 0.95)", 4, 90);
-            state.playerShots.splice(i, 1);
-            continue;
+            if (shot.type !== "tick_phaser") {
+              addSpark(shot.x, shot.y, "rgba(255, 215, 106, 0.95)", 4, 90);
+              state.playerShots.splice(i, 1);
+              continue;
+            }
+          }
+
+          if (shot.type === "tick_phaser" && !tickTouching) {
+            shot.hasInitialImpact = false;
+            shot.tickTimer = shot.tickInterval;
           }
 
           if (shot.life <= 0 || shot.x < -40 || shot.x > width + 40 || shot.y < -40 || shot.y > height + 40) {
@@ -11853,7 +12133,8 @@
           7: 0.46,
           8: 0.42,
           9: 0.44,
-          10: 0.46
+          10: 0.46,
+          11: 0.54
         };
         const scale = (bossScaleMap[ambient.index] || 0.24) * (ambient.scale / 0.28);
 
@@ -12093,6 +12374,10 @@
             y: 0,
             phase: 1,
             rotation: time * 0.6 + ambient.seed,
+            bladeSpread: 1,
+            orbitAnchorX: 0,
+            orbitAnchorY: 0,
+            hitFxCooldown: 0,
             projectiles: [],
             blades: [],
             floorBlades: [],
@@ -12111,7 +12396,8 @@
             projectiles: [],
             slicks: [],
             fragments: [],
-            detachedBar: null
+            detachedBar: null,
+            phase4DetachedBars: []
           };
           drawSlabhraidhBoss();
           state.slabhraidh = previous;
@@ -13811,17 +14097,94 @@
         const bulletCoreColor = mixHexColors(bulletColor, "#ffffff", 0.12);
         for (const shot of state.playerShots) {
           const alpha = clamp(shot.life, 0, 1);
-          const gradient = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 7);
-          gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
-          gradient.addColorStop(0.35, hexToRgba(bulletGlowColor, alpha * 0.85));
-          gradient.addColorStop(1, hexToRgba(bulletColor, 0));
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(shot.x, shot.y, shot.size * 7, 0, TAU);
-          ctx.fill();
+          if (shot.type === "spark_targets") {
+            const gradient = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 8);
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            gradient.addColorStop(0.4, hexToRgba(mixHexColors(bulletColor, "#fff4c0", 0.45), alpha * 0.82));
+            gradient.addColorStop(1, hexToRgba(bulletColor, 0));
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(shot.x, shot.y, shot.size * 8, 0, TAU);
+            ctx.fill();
+            ctx.save();
+            ctx.translate(shot.x, shot.y);
+            ctx.rotate(shot.rotation);
+            ctx.fillStyle = mixHexColors(bulletColor, "#fff8da", 0.52);
+            ctx.beginPath();
+            for (let p = 0; p < 10; p++) {
+              const angle = (Math.PI / 5) * p;
+              const radius = p % 2 === 0 ? shot.size * 2.4 : shot.size * 1.05;
+              const px = Math.cos(angle) * radius;
+              const py = Math.sin(angle) * radius;
+              if (p === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          } else if (shot.type === "orbital_strike") {
+            const angle = Math.atan2(shot.vy, shot.vx);
+            const glow = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 5.6);
+            glow.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            glow.addColorStop(0.35, "rgba(255, 188, 126, 0.84)");
+            glow.addColorStop(1, "rgba(255, 188, 126, 0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(shot.x, shot.y, shot.size * 5.6, 0, TAU);
+            ctx.fill();
+            ctx.save();
+            ctx.translate(shot.x, shot.y);
+            ctx.rotate(angle);
+            ctx.fillStyle = "rgba(255, 240, 214, 0.96)";
+            ctx.beginPath();
+            ctx.moveTo(shot.size * 2.1, 0);
+            ctx.lineTo(shot.size * 0.65, shot.size * 0.72);
+            ctx.lineTo(-shot.size * 1.55, shot.size * 0.72);
+            ctx.lineTo(-shot.size * 2.05, shot.size * 0.28);
+            ctx.lineTo(-shot.size * 2.05, -shot.size * 0.28);
+            ctx.lineTo(-shot.size * 1.55, -shot.size * 0.72);
+            ctx.lineTo(shot.size * 0.65, -shot.size * 0.72);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "rgba(255, 174, 88, 0.95)";
+            ctx.fillRect(-shot.size * 1.5, -shot.size * 0.28, shot.size * 1.9, shot.size * 0.56);
+            ctx.fillStyle = "rgba(255, 118, 40, 0.9)";
+            ctx.fillRect(-shot.size * 1.95, -shot.size * 0.18, shot.size * 0.4, shot.size * 0.36);
+            ctx.restore();
+          } else if (shot.type === "tick_phaser") {
+            const angle = Math.atan2(shot.vy, shot.vx);
+            const glow = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 6.5);
+            glow.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            glow.addColorStop(0.35, hexToRgba(mixHexColors(bulletColor, "#8effff", 0.22), alpha * 0.8));
+            glow.addColorStop(1, hexToRgba(bulletColor, 0));
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(shot.x, shot.y, shot.size * 6.5, 0, TAU);
+            ctx.fill();
+            ctx.save();
+            ctx.translate(shot.x, shot.y);
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.fillStyle = mixHexColors(bulletColor, "#ffffff", 0.18);
+            ctx.beginPath();
+            ctx.moveTo(0, -shot.size * 2.45);
+            ctx.lineTo(shot.size * 1.38, shot.size * 1.6);
+            ctx.lineTo(-shot.size * 1.38, shot.size * 1.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          } else {
+            const gradient = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 7);
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            gradient.addColorStop(0.35, hexToRgba(bulletGlowColor, alpha * 0.85));
+            gradient.addColorStop(1, hexToRgba(bulletColor, 0));
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(shot.x, shot.y, shot.size * 7, 0, TAU);
+            ctx.fill();
 
-          ctx.fillStyle = bulletCoreColor;
-          ctx.fillRect(shot.x - shot.size * 0.5, shot.y - 14, shot.size, 22);
+            ctx.fillStyle = bulletCoreColor;
+            ctx.fillRect(shot.x - shot.size * 0.5, shot.y - 14, shot.size, 22);
+          }
         }
         ctx.restore();
       }
@@ -13896,6 +14259,36 @@
         ctx.beginPath();
         ctx.arc(player.x, player.y, glowRadius, 0, TAU);
         ctx.fill();
+
+        if (state.primaryCharge?.type === "orbital_strike") {
+          const chargeProgress = clamp(1 - state.primaryCharge.timer / 1.7, 0, 1);
+          const chargeGlow = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, 34 + chargeProgress * 38);
+          chargeGlow.addColorStop(0, `rgba(255, 248, 235, ${0.16 + chargeProgress * 0.24})`);
+          chargeGlow.addColorStop(0.4, `rgba(255, 184, 94, ${0.1 + chargeProgress * 0.24})`);
+          chargeGlow.addColorStop(1, "rgba(255, 184, 94, 0)");
+          ctx.fillStyle = chargeGlow;
+          ctx.beginPath();
+          ctx.arc(player.x, player.y, 34 + chargeProgress * 38, 0, TAU);
+          ctx.fill();
+
+          ctx.save();
+          ctx.translate(player.x, player.y);
+          ctx.rotate(state.elapsed * 2.1);
+          ctx.strokeStyle = `rgba(255, 220, 172, ${0.3 + chargeProgress * 0.32})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, 18 + chargeProgress * 10, -0.9, 0.9);
+          ctx.stroke();
+          ctx.rotate(Math.PI * 0.66);
+          ctx.beginPath();
+          ctx.arc(0, 0, 18 + chargeProgress * 10, -0.9, 0.9);
+          ctx.stroke();
+          ctx.rotate(Math.PI * 0.66);
+          ctx.beginPath();
+          ctx.arc(0, 0, 18 + chargeProgress * 10, -0.9, 0.9);
+          ctx.stroke();
+          ctx.restore();
+        }
 
         ctx.save();
         ctx.translate(player.x, player.y);
@@ -15651,25 +16044,32 @@
         return base * (1 + s.extendAmount * 0.2);
       }
 
+      function getSlabhraidhHomeBarState(index, length = getSlabhraidhBarLength(), thickness = state.slabhraidh.phase >= 4 ? 34 : 28) {
+        const s = state.slabhraidh;
+        const coreRadius = getSlabhraidhCoreRadius();
+        const angle = s.rotation + index * (TAU / 3);
+        const offset = coreRadius + length * 0.46;
+        return {
+          index,
+          x: s.x + Math.cos(angle) * offset,
+          y: s.y + Math.sin(angle) * offset,
+          rotation: angle,
+          length,
+          thickness
+        };
+      }
+
       function getSlabhraidhBarStates() {
         const s = state.slabhraidh;
+        if (s.phase >= 5) return [];
         const bars = [];
-        const coreRadius = getSlabhraidhCoreRadius();
         const length = getSlabhraidhBarLength();
         const thickness = s.phase >= 4 ? 34 : 28;
-        const activeCount = s.phase === 3 ? 2 : s.phase >= 5 ? 0 : 3;
-        for (let i = 0; i < activeCount; i++) {
-          const sourceIndex = s.phase === 3 && i >= s.snappedBarIndex ? i + 1 : i;
-          const angle = s.rotation + sourceIndex * (TAU / 3);
-          const offset = coreRadius + length * 0.46;
-          bars.push({
-            index: sourceIndex,
-            x: s.x + Math.cos(angle) * offset,
-            y: s.y + Math.sin(angle) * offset,
-            rotation: angle,
-            length,
-            thickness
-          });
+        const detachedIndices = new Set((s.phase4DetachedBars || []).map((bar) => bar.index));
+        for (let index = 0; index < 3; index++) {
+          if (s.phase === 3 && index === s.snappedBarIndex) continue;
+          if (s.phase === 4 && detachedIndices.has(index)) continue;
+          bars.push(getSlabhraidhHomeBarState(index, length, thickness));
         }
         return bars;
       }
@@ -15705,7 +16105,10 @@
       }
 
       function spawnSlabhraidhOilDrop() {
-        const targetY = 120 + Math.random() * Math.max(160, height * 0.62);
+        const hitsBottom = Math.random() < 0.38;
+        const targetY = hitsBottom
+          ? height - 26
+          : 120 + Math.random() * Math.max(160, height * 0.62);
         state.slabhraidh.projectiles.push({
           type: "oil_drop",
           x: 34 + Math.random() * Math.max(40, width - 68),
@@ -15713,6 +16116,7 @@
           vx: (Math.random() - 0.5) * 42,
           vy: 188 + Math.random() * 68,
           radius: 12 + Math.random() * 6,
+          hitsBottom,
           splatY: clamp(targetY, 96, height - 26),
           life: 8.8
         });
@@ -15743,42 +16147,66 @@
 
       function spawnSlabhraidhHookBullets() {
         const s = state.slabhraidh;
-        for (let i = 0; i < 4; i++) {
-          const angle = s.rotation + (i - 1.5) * 0.28;
+        for (let i = 0; i < 10; i++) {
+          const angle = s.rotation + (i - 4.5) * 0.18;
           s.projectiles.push({
             type: "hook",
             x: s.x,
             y: s.y,
-            vx: Math.cos(angle) * 240,
-            vy: Math.sin(angle) * 240,
+            vx: Math.cos(angle) * 250,
+            vy: Math.sin(angle) * 250,
             size: 10,
-            delay: 0.42 + i * 0.05,
+            delay: 0.26 + i * 0.035,
             turned: false,
-            life: 5.8
+            life: 6.3
           });
         }
       }
 
       function spawnSlabhraidhPhase4Pattern() {
         const s = state.slabhraidh;
-        for (let ring = 0; ring < 2; ring++) {
-          const count = 16 + ring * 6;
+        for (let ring = 0; ring < 3; ring++) {
+          const count = 18 + ring * 8;
           for (let i = 0; i < count; i++) {
             const angle = s.rotation * (1.1 + ring * 0.1) + (i / count) * TAU;
-            const speed = 120 + ring * 22;
+            const speed = 148 + ring * 30;
             s.projectiles.push({
               type: "fan_square",
               x: s.x,
               y: s.y,
               vx: Math.cos(angle) * speed,
               vy: Math.sin(angle) * speed,
-              size: 8 + ring * 2,
+              size: 9 + ring * 2,
               spin: (i % 2 === 0 ? 1 : -1) * (1.5 + ring * 0.35),
               angle,
-              life: 6.4,
+              life: 8.2,
               color: i % 3 === 0 ? "orange" : "white"
             });
           }
+        }
+        for (const corner of [
+          { x: 18, y: 18 },
+          { x: width - 18, y: 18 },
+          { x: 18, y: height - 18 },
+          { x: width - 18, y: height - 18 }
+        ]) {
+          const dx = corner.x - s.x;
+          const dy = corner.y - s.y;
+          const distance = Math.hypot(dx, dy) || 1;
+          const angle = Math.atan2(dy, dx);
+          const speed = 230;
+          s.projectiles.push({
+            type: "fan_square",
+            x: s.x,
+            y: s.y,
+            vx: (dx / distance) * speed,
+            vy: (dy / distance) * speed,
+            size: 12,
+            spin: Math.random() > 0.5 ? 1.6 : -1.6,
+            angle,
+            life: 8.8,
+            color: "orange"
+          });
         }
       }
 
@@ -15810,6 +16238,12 @@
           s.projectiles.length = 0;
           s.slicks.length = nextPhase === 1 ? s.slicks.length : Math.min(s.slicks.length, 4);
           s.extendAmount = 0;
+          s.pelletChainCount = 0;
+          s.pelletChainTimer = 0;
+          s.extendChainCount = 0;
+          s.extendChainTimer = 0;
+          s.phase4DetachTimer = 1.1 + Math.random() * 1.2;
+          s.phase4DetachedBars.length = 0;
           addFlash(s.x, s.y, "rgba(255,176,104,0.26)", 170 + nextPhase * 20);
           addSpark(s.x, s.y, "rgba(255,188,120,0.94)", 28 + nextPhase * 5, 220);
           if (nextPhase === 3) {
@@ -15820,15 +16254,17 @@
             s.detachedBar = {
               x: s.x + Math.cos(snapAngle) * offset,
               y: s.y + Math.sin(snapAngle) * offset,
-              vx: Math.cos(snapAngle) * 260,
-              vy: Math.sin(snapAngle) * 220,
+              vx: Math.cos(snapAngle) * 380,
+              vy: Math.sin(snapAngle) * 320,
               rotation: snapAngle,
-              rotationSpeed: 2.8,
+              rotationSpeed: 4.8,
               length: barLength,
               thickness: 28,
+              targetX: s.x + Math.cos(snapAngle) * offset,
+              targetY: s.y + Math.sin(snapAngle) * offset,
               mode: "bounce"
             };
-          } else if (s.detachedBar && nextPhase > 3) {
+          } else if (s.detachedBar && nextPhase === 5) {
             s.detachedBar.mode = "fall";
             s.detachedBar.vx *= 0.45;
             s.detachedBar.vy = Math.abs(s.detachedBar.vy) + 180;
@@ -15840,7 +16276,7 @@
         }
         state.bossPhase = s.phase;
 
-        s.rotation += dt * (s.phase === 1 ? 0.65 : s.phase === 2 ? 1.28 : s.phase === 3 ? 1.46 : s.phase === 4 ? 2.2 : 1.05);
+        s.rotation += dt * (s.phase === 1 ? 0.65 : s.phase === 2 ? 1.28 : s.phase === 3 ? 1.46 : s.phase === 4 ? 2.2 : 4.2);
         s.beamSpin += dt * 1.1;
         s.extendAmount += (0 - s.extendAmount) * Math.min(1, dt * 2.2);
 
@@ -15861,33 +16297,43 @@
           s.targetX = centerX;
           s.targetY = height * 0.24;
         } else {
-          s.targetX = centerX;
-          s.targetY = height * 0.22;
+          s.targetX = clamp(player.x, 148, width - 148);
+          s.targetY = clamp(player.y, 96, height - 120);
         }
 
-        const driftForce = s.phase === 1 ? 2.65 : s.phase === 2 ? 2.4 : s.phase === 4 ? 1.8 : 1.9;
+        const driftForce = s.phase === 1 ? 2.65 : s.phase === 2 ? 2.4 : s.phase === 4 ? 1.8 : s.phase === 5 ? 1.45 : 1.9;
         s.vx += (s.targetX - s.x) * dt * driftForce;
         s.vy += (s.targetY - s.y) * dt * driftForce;
-        s.vx *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : 0.92;
-        s.vy *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : 0.92;
+        s.vx *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : s.phase === 5 ? 0.96 : 0.92;
+        s.vy *= s.phase === 1 ? 0.95 : s.phase === 2 ? 0.965 : s.phase === 5 ? 0.96 : 0.92;
         if (s.phase === 5) {
-          s.vx *= 0.74;
-          s.vy *= 0.74;
+          s.vx *= 0.92;
+          s.vy *= 0.92;
         }
         const bossBounds = s.phase === 1 ? 150 : 120;
         s.x = clamp(s.x + s.vx * dt, bossBounds, width - bossBounds);
-        s.y = clamp(s.y + s.vy * dt, 96, height * 0.42);
+        s.y = clamp(s.y + s.vy * dt, 96, s.phase === 5 ? height - 120 : height * 0.42);
 
         s.pelletTimer -= dt;
+        s.pelletChainTimer -= dt;
         s.oilTimer -= dt;
         s.extendTimer -= dt;
+        s.extendChainTimer -= dt;
         s.hookTimer -= dt;
         s.patternTimer -= dt;
+        s.phase4DetachTimer -= dt;
         s.sparkTimer -= dt;
 
         if (s.phase === 1) {
+          if (s.pelletChainCount > 0 && s.pelletChainTimer <= 0) {
+            s.pelletChainTimer = 0.18;
+            s.pelletChainCount--;
+            for (const bar of getSlabhraidhBarStates()) spawnSlabhraidhPelletBurst(bar);
+          }
           if (s.pelletTimer <= 0) {
             s.pelletTimer = 3.4 + Math.random() * 2.3;
+            s.pelletChainCount = 5;
+            s.pelletChainTimer = 0;
             for (const bar of getSlabhraidhBarStates()) spawnSlabhraidhPelletBurst(bar);
           }
           if (s.oilTimer <= 0) {
@@ -15896,9 +16342,16 @@
             for (let drop = 0; drop < burst; drop++) spawnSlabhraidhOilDrop();
           }
         } else if (s.phase === 2) {
+          if (s.extendChainCount > 0 && s.extendChainTimer <= 0) {
+            s.extendChainTimer = 0.14;
+            s.extendChainCount--;
+            spawnSlabhraidhSpiralBurst();
+          }
           if (s.extendTimer <= 0) {
             s.extendTimer = 3 + Math.random() * 3;
             s.extendAmount = 1;
+            s.extendChainCount = 4;
+            s.extendChainTimer = 0;
             spawnSlabhraidhSpiralBurst();
           }
           if (s.oilTimer <= 0) {
@@ -15910,24 +16363,58 @@
             s.hookTimer = 1.25;
             spawnSlabhraidhHookBullets();
           }
-          if (s.detachedBar) {
+        }
+
+        if (s.detachedBar && (s.phase === 3 || s.phase === 4 || s.phase === 5)) {
+          s.detachedBar.rotation += s.detachedBar.rotationSpeed * dt;
+          if (s.phase === 4 && s.detachedBar.mode !== "fall") {
+            if (s.phase4DetachTimer <= 0) {
+              s.phase4DetachTimer = 2.4;
+              s.detachedBar.targetX = clamp(player.x, 64, width - 64);
+              s.detachedBar.targetY = clamp(player.y, 64, height - 64);
+            }
+            const chaseX = s.detachedBar.targetX;
+            const chaseY = s.detachedBar.targetY;
+            const dx = chaseX - s.detachedBar.x;
+            const dy = chaseY - s.detachedBar.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            s.detachedBar.vx += (dx / dist) * 420 * dt;
+            s.detachedBar.vy += (dy / dist) * 420 * dt;
+            s.detachedBar.vx *= 0.982;
+            s.detachedBar.vy *= 0.982;
+            const speed = Math.hypot(s.detachedBar.vx, s.detachedBar.vy) || 1;
+            const maxSpeed = 420;
+            if (speed > maxSpeed) {
+              s.detachedBar.vx = (s.detachedBar.vx / speed) * maxSpeed;
+              s.detachedBar.vy = (s.detachedBar.vy / speed) * maxSpeed;
+            }
             s.detachedBar.x += s.detachedBar.vx * dt;
             s.detachedBar.y += s.detachedBar.vy * dt;
-            s.detachedBar.rotation += s.detachedBar.rotationSpeed * dt;
-            if (s.detachedBar.mode === "bounce") {
-              if (s.detachedBar.x < 60 || s.detachedBar.x > width - 60) s.detachedBar.vx *= -1;
-              if (s.detachedBar.y < 60 || s.detachedBar.y > height - 60) s.detachedBar.vy *= -1;
-            } else {
-              s.detachedBar.vy += 240 * dt;
-              if (s.detachedBar.y - s.detachedBar.length > height + 120) s.detachedBar = null;
-            }
+            const angleTarget = Math.atan2(s.detachedBar.vy, s.detachedBar.vx);
+            s.detachedBar.rotation += Math.atan2(Math.sin(angleTarget - s.detachedBar.rotation), Math.cos(angleTarget - s.detachedBar.rotation)) * Math.min(1, dt * 3.8);
+            const margin = 64;
+            if (s.detachedBar.x < margin || s.detachedBar.x > width - margin) s.detachedBar.vx *= -1;
+            if (s.detachedBar.y < margin || s.detachedBar.y > height - margin) s.detachedBar.vy *= -1;
+            s.detachedBar.x = clamp(s.detachedBar.x, margin, width - margin);
+            s.detachedBar.y = clamp(s.detachedBar.y, margin, height - margin);
+          } else if (s.phase === 3 && s.detachedBar.mode === "bounce") {
+            s.detachedBar.x += s.detachedBar.vx * dt;
+            s.detachedBar.y += s.detachedBar.vy * dt;
+            if (s.detachedBar.x < 60 || s.detachedBar.x > width - 60) s.detachedBar.vx *= -1;
+            if (s.detachedBar.y < 60 || s.detachedBar.y > height - 60) s.detachedBar.vy *= -1;
+          } else {
+            s.detachedBar.x += s.detachedBar.vx * dt;
+            s.detachedBar.y += s.detachedBar.vy * dt;
+            s.detachedBar.vy += 240 * dt;
+            if (s.detachedBar.y - s.detachedBar.length > height + 120) s.detachedBar = null;
           }
-        } else if (s.phase === 4) {
+        }
+        if (s.phase === 4) {
           if (s.patternTimer <= 0) {
             s.patternTimer = 0.24;
             spawnSlabhraidhPhase4Pattern();
           }
-        } else {
+        } else if (s.phase === 5) {
           if (!s.fragments.length) {
             for (let i = 0; i < 140; i++) {
               const angle = Math.random() * TAU;
@@ -16091,28 +16578,56 @@
         const s = state.slabhraidh;
         const coreRadius = getSlabhraidhCoreRadius();
         const bars = getSlabhraidhBarStates();
+        const phaseGlow = s.phase === 5 ? 1 : s.phase === 4 ? 0.8 : s.phase === 3 ? 0.58 : s.phase === 2 ? 0.38 : 0.24;
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        const aura = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, coreRadius * 3.1);
-        aura.addColorStop(0, s.phase >= 5 ? "rgba(255,236,214,0.18)" : "rgba(255,184,116,0.16)");
-        aura.addColorStop(0.48, "rgba(255,128,64,0.12)");
+        const aura = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, coreRadius * (3.3 + phaseGlow * 0.6));
+        aura.addColorStop(0, s.phase >= 5 ? "rgba(255,246,226,0.24)" : s.phase >= 4 ? "rgba(255,208,152,0.2)" : "rgba(255,184,116,0.16)");
+        aura.addColorStop(0.3, s.phase >= 4 ? "rgba(255,148,66,0.18)" : "rgba(255,128,64,0.12)");
+        aura.addColorStop(0.56, s.phase >= 3 ? "rgba(122,74,44,0.18)" : "rgba(74,52,38,0.12)");
         aura.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = aura;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, coreRadius * 3.1, 0, TAU);
+        ctx.arc(s.x, s.y, coreRadius * (3.3 + phaseGlow * 0.6), 0, TAU);
         ctx.fill();
 
+        for (let halo = 0; halo < (s.phase >= 4 ? 3 : 2); halo++) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.rotation * (0.18 + halo * 0.1) * (halo % 2 === 0 ? 1 : -1));
+          ctx.strokeStyle = halo === 0
+            ? `rgba(255, ${176 + halo * 18}, ${88 + halo * 10}, ${0.12 + phaseGlow * 0.1})`
+            : `rgba(255, 236, 220, ${0.06 + phaseGlow * 0.05})`;
+          ctx.lineWidth = 5 - halo * 1.2;
+          ctx.beginPath();
+          for (let point = 0; point < 18; point++) {
+            const angle = (point / 18) * TAU;
+            const radius = coreRadius * (1.45 + halo * 0.18) + Math.sin(state.elapsed * (2.4 + halo) + point) * (8 + halo * 2);
+            const px = Math.cos(angle) * radius;
+            const py = Math.sin(angle) * radius;
+            if (point === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (s.phase >= 4) {
-          for (let gear = 0; gear < 3; gear++) {
+          for (let gear = 0; gear < 4; gear++) {
             ctx.save();
             ctx.translate(s.x, s.y);
             ctx.rotate(s.rotation * (gear % 2 === 0 ? 1 : -1) + gear);
-            ctx.strokeStyle = gear === 0 ? "rgba(255,196,124,0.32)" : "rgba(255,244,224,0.18)";
-            ctx.lineWidth = 6 - gear;
+            ctx.strokeStyle = gear === 0
+              ? "rgba(255,212,146,0.42)"
+              : gear === 1
+              ? "rgba(255,164,82,0.26)"
+              : "rgba(255,244,224,0.15)";
+            ctx.lineWidth = Math.max(1.4, 6 - gear);
             ctx.beginPath();
-            for (let tooth = 0; tooth < 16; tooth++) {
-              const angle = (tooth / 16) * TAU;
-              const r = coreRadius * (1.1 + gear * 0.16);
+            for (let tooth = 0; tooth < 18; tooth++) {
+              const angle = (tooth / 18) * TAU;
+              const r = coreRadius * (1.08 + gear * 0.14) + Math.sin(state.elapsed * 3.2 + tooth + gear) * 4;
               const x = Math.cos(angle) * r;
               const y = Math.sin(angle) * r;
               if (tooth === 0) ctx.moveTo(x, y);
@@ -16129,25 +16644,48 @@
           ctx.translate(bar.x, bar.y);
           ctx.rotate(bar.rotation);
           const metal = ctx.createLinearGradient(-bar.length * 0.5, 0, bar.length * 0.5, 0);
-          metal.addColorStop(0, "rgba(66,70,74,0.96)");
-          metal.addColorStop(0.5, "rgba(116,120,126,0.98)");
-          metal.addColorStop(1, "rgba(48,52,58,0.96)");
+          metal.addColorStop(0, s.phase >= 5 ? "rgba(120,124,130,0.98)" : s.phase >= 4 ? "rgba(76,80,86,0.98)" : "rgba(66,70,74,0.96)");
+          metal.addColorStop(0.28, "rgba(38,40,44,0.96)");
+          metal.addColorStop(0.5, s.phase >= 4 ? "rgba(156,160,168,0.98)" : "rgba(116,120,126,0.98)");
+          metal.addColorStop(0.72, "rgba(44,46,52,0.96)");
+          metal.addColorStop(1, s.phase >= 5 ? "rgba(92,96,104,0.98)" : "rgba(48,52,58,0.96)");
           ctx.fillStyle = metal;
           ctx.fillRect(-bar.length * 0.5, -bar.thickness * 0.5, bar.length, bar.thickness);
-          ctx.strokeStyle = "rgba(24,24,28,0.84)";
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = s.phase >= 4 ? "rgba(16,16,18,0.94)" : "rgba(24,24,28,0.84)";
+          ctx.lineWidth = 2.2;
           ctx.strokeRect(-bar.length * 0.5, -bar.thickness * 0.5, bar.length, bar.thickness);
-          for (let tooth = 0; tooth < 7; tooth++) {
-            const t = (tooth / 6) - 0.5;
-            const x = t * bar.length * 0.88 + Math.sin(state.elapsed * 6 + tooth + bar.index) * 8;
-            ctx.fillStyle = tooth % 2 === 0 ? "rgba(255,168,82,0.9)" : "rgba(255,120,44,0.92)";
-            ctx.fillRect(x - 10, -bar.thickness * 0.22, 20, bar.thickness * 0.44);
+          for (let rib = 0; rib < 6; rib++) {
+            const t = (rib / 5) - 0.5;
+            const x = t * bar.length * 0.9;
+            ctx.fillStyle = "rgba(28,30,34,0.46)";
+            ctx.fillRect(x - 5, -bar.thickness * 0.5, 10, bar.thickness);
           }
+          for (let tooth = 0; tooth < 9; tooth++) {
+            const t = (tooth / 8) - 0.5;
+            const x = t * bar.length * 0.9 + Math.sin(state.elapsed * 6.5 + tooth + bar.index) * 9;
+            const toothHeight = bar.thickness * (s.phase >= 4 ? 0.5 : 0.44);
+            ctx.fillStyle = tooth % 2 === 0
+              ? (s.phase >= 5 ? "rgba(255,228,186,0.94)" : "rgba(255,176,88,0.92)")
+              : (s.phase >= 4 ? "rgba(255,128,34,0.94)" : "rgba(255,120,44,0.92)");
+            ctx.fillRect(x - 11, -toothHeight * 0.5, 22, toothHeight);
+            if (s.phase >= 3) {
+              ctx.fillStyle = "rgba(255,244,220,0.18)";
+              ctx.fillRect(x - 4, -toothHeight * 0.34, 8, toothHeight * 0.68);
+            }
+          }
+          ctx.strokeStyle = `rgba(255, ${168 + s.phase * 8}, ${82 + s.phase * 4}, ${0.14 + phaseGlow * 0.18})`;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-bar.length * 0.48, -bar.thickness * 0.24, bar.length * 0.96, bar.thickness * 0.48);
           if (s.phase >= 4) {
-            ctx.fillStyle = "rgba(255,156,78,0.18)";
-            ctx.fillRect(-bar.length * 0.5, -6, bar.length, 12);
+            ctx.fillStyle = s.phase >= 5 ? "rgba(255,214,154,0.26)" : "rgba(255,156,78,0.18)";
+            ctx.fillRect(-bar.length * 0.5, -7, bar.length, 14);
             ctx.fillStyle = "rgba(255,230,210,0.3)";
-            ctx.fillRect(-bar.length * 0.5, -2, bar.length, 4);
+            ctx.fillRect(-bar.length * 0.5, -2.4, bar.length, 4.8);
+            for (let spark = 0; spark < 3; spark++) {
+              const sparkX = -bar.length * 0.3 + spark * bar.length * 0.3 + Math.sin(state.elapsed * 4 + spark + bar.index) * 16;
+              ctx.fillStyle = spark % 2 === 0 ? "rgba(255,196,120,0.22)" : "rgba(255,244,226,0.16)";
+              ctx.fillRect(sparkX - 6, -bar.thickness * 0.34, 12, bar.thickness * 0.68);
+            }
           }
           ctx.restore();
         }
@@ -16159,21 +16697,50 @@
           ctx.rotate(det.rotation);
           ctx.fillStyle = "rgba(88,92,98,0.94)";
           ctx.fillRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
-          ctx.strokeStyle = "rgba(255,160,88,0.42)";
+          ctx.strokeStyle = "rgba(255,160,88,0.58)";
           ctx.lineWidth = 3;
           ctx.strokeRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
-          for (let tooth = 0; tooth < 6; tooth++) {
-            const x = ((tooth / 5) - 0.5) * det.length * 0.86;
-            ctx.fillStyle = "rgba(255,168,82,0.88)";
-            ctx.fillRect(x - 9, -det.thickness * 0.2, 18, det.thickness * 0.4);
+          for (let tooth = 0; tooth < 7; tooth++) {
+            const x = ((tooth / 6) - 0.5) * det.length * 0.86;
+            ctx.fillStyle = tooth % 2 === 0 ? "rgba(255,176,96,0.92)" : "rgba(255,122,48,0.9)";
+            ctx.fillRect(x - 10, -det.thickness * 0.24, 20, det.thickness * 0.48);
           }
+          ctx.fillStyle = "rgba(255,228,214,0.14)";
+          ctx.fillRect(-det.length * 0.5, -2, det.length, 4);
+          ctx.restore();
+        }
+
+        for (const det of s.phase4DetachedBars) {
+          ctx.save();
+          ctx.translate(det.x, det.y);
+          ctx.rotate(det.rotation);
+          const detGrad = ctx.createLinearGradient(-det.length * 0.5, 0, det.length * 0.5, 0);
+          detGrad.addColorStop(0, "rgba(86,90,96,0.98)");
+          detGrad.addColorStop(0.5, "rgba(158,162,170,0.96)");
+          detGrad.addColorStop(1, "rgba(68,72,78,0.98)");
+          ctx.fillStyle = detGrad;
+          ctx.fillRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
+          ctx.strokeStyle = "rgba(255,176,96,0.6)";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(-det.length * 0.5, -det.thickness * 0.5, det.length, det.thickness);
+          for (let tooth = 0; tooth < 8; tooth++) {
+            const x = ((tooth / 7) - 0.5) * det.length * 0.88;
+            ctx.fillStyle = tooth % 2 === 0 ? "rgba(255,182,102,0.94)" : "rgba(255,124,42,0.92)";
+            ctx.fillRect(x - 10, -det.thickness * 0.24, 20, det.thickness * 0.48);
+          }
+          ctx.fillStyle = "rgba(255,236,220,0.16)";
+          ctx.fillRect(-det.length * 0.5, -2, det.length, 4);
           ctx.restore();
         }
 
         ctx.save();
         ctx.translate(s.x, s.y);
         ctx.rotate(s.rotation * 0.35);
-        ctx.fillStyle = s.phase >= 5 ? "rgba(248,242,232,0.96)" : s.phase >= 4 ? "rgba(124,130,138,0.98)" : "rgba(86,92,100,0.98)";
+        const core = ctx.createRadialGradient(-coreRadius * 0.2, -coreRadius * 0.24, 0, 0, 0, coreRadius * 1.15);
+        core.addColorStop(0, s.phase >= 5 ? "rgba(255,246,232,0.98)" : s.phase >= 4 ? "rgba(222,214,202,0.96)" : "rgba(156,160,168,0.92)");
+        core.addColorStop(0.34, s.phase >= 5 ? "rgba(255,170,92,0.82)" : s.phase >= 4 ? "rgba(154,160,168,0.94)" : "rgba(108,114,122,0.94)");
+        core.addColorStop(1, s.phase >= 5 ? "rgba(126,78,36,0.98)" : "rgba(68,74,82,0.98)");
+        ctx.fillStyle = core;
         ctx.beginPath();
         for (let i = 0; i < 3; i++) {
           const angle = -Math.PI * 0.5 + i * (TAU / 3);
@@ -16185,13 +16752,42 @@
         }
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = s.phase >= 5 ? "rgba(255,170,96,0.72)" : "rgba(36,36,42,0.84)";
+        ctx.strokeStyle = s.phase >= 5 ? "rgba(255,188,112,0.86)" : s.phase >= 4 ? "rgba(255,148,74,0.42)" : "rgba(30,30,34,0.9)";
         ctx.lineWidth = 4;
         ctx.stroke();
+        for (let plate = 0; plate < 3; plate++) {
+          const inset = coreRadius * (0.26 + plate * 0.15);
+          ctx.strokeStyle = plate === 0
+            ? `rgba(255, ${188 + plate * 14}, ${112 + plate * 6}, ${0.12 + phaseGlow * 0.12})`
+            : `rgba(24, 24, 28, ${0.24 - plate * 0.05})`;
+          ctx.lineWidth = 2 - plate * 0.25;
+          ctx.beginPath();
+          for (let i = 0; i < 3; i++) {
+            const angle = -Math.PI * 0.5 + i * (TAU / 3);
+            const r = coreRadius - inset;
+            const x = Math.cos(angle) * r;
+            const y = Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+        if (s.phase >= 2) {
+          for (let vent = 0; vent < 3; vent++) {
+            const angle = s.rotation * 0.5 + vent * (TAU / 3);
+            ctx.strokeStyle = "rgba(255,178,92,0.26)";
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angle) * coreRadius * 0.16, Math.sin(angle) * coreRadius * 0.16);
+            ctx.lineTo(Math.cos(angle) * coreRadius * 0.82, Math.sin(angle) * coreRadius * 0.82);
+            ctx.stroke();
+          }
+        }
         if (s.phase >= 5) {
-          for (let crack = 0; crack < 5; crack++) {
-            ctx.strokeStyle = crack % 2 === 0 ? "rgba(255,188,112,0.82)" : "rgba(255,236,220,0.5)";
-            ctx.lineWidth = 2;
+          for (let crack = 0; crack < 7; crack++) {
+            ctx.strokeStyle = crack % 2 === 0 ? "rgba(255,188,112,0.92)" : "rgba(255,236,220,0.56)";
+            ctx.lineWidth = 2.2;
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.lineTo(Math.cos(crack * 1.3 + state.elapsed * 0.3) * coreRadius * 0.74, Math.sin(crack * 1.3 + state.elapsed * 0.3) * coreRadius * 0.74);
@@ -16261,19 +16857,19 @@
       function drawSlabhraidhPreview(ctxPreview, time) {
         const cx = 64;
         const cy = 64;
-        const coreRadius = 20;
+        const coreRadius = 28;
         for (let i = 0; i < 3; i++) {
           const angle = time * 0.8 + i * (TAU / 3);
-          const x = cx + Math.cos(angle) * 28;
-          const y = cy + Math.sin(angle) * 28;
+          const x = cx + Math.cos(angle) * 34;
+          const y = cy + Math.sin(angle) * 34;
           ctxPreview.save();
           ctxPreview.translate(x, y);
           ctxPreview.rotate(angle);
           ctxPreview.fillStyle = "rgba(92,96,104,0.96)";
-          ctxPreview.fillRect(-24, -6, 48, 12);
-          for (let tooth = 0; tooth < 3; tooth++) {
+          ctxPreview.fillRect(-32, -8, 64, 16);
+          for (let tooth = 0; tooth < 4; tooth++) {
             ctxPreview.fillStyle = "rgba(255,170,82,0.9)";
-            ctxPreview.fillRect(-16 + tooth * 12, -3, 8, 6);
+            ctxPreview.fillRect(-24 + tooth * 16, -4, 10, 8);
           }
           ctxPreview.restore();
         }
@@ -17923,6 +18519,13 @@
           return;
         }
 
+        const primaryLoadout = event.target.closest("[data-primary-loadout]");
+        if (primaryLoadout) {
+          setPrimaryBulletLoadout(primaryLoadout.dataset.primaryLoadout);
+          renderEditAttacks();
+          return;
+        }
+
         const shopUltimate = event.target.closest("[data-shop-buy-ultimate]");
         if (shopUltimate) {
           purchaseUltimate(shopUltimate.dataset.shopBuyUltimate);
@@ -17933,6 +18536,13 @@
         const shopXl = event.target.closest("[data-shop-buy-xl]");
         if (shopXl) {
           purchaseXlBullet(shopXl.dataset.shopBuyXl);
+          renderEditAttacks();
+          return;
+        }
+
+        const shopPrimary = event.target.closest("[data-shop-buy-primary]");
+        if (shopPrimary) {
+          purchasePrimaryBullet(shopPrimary.dataset.shopBuyPrimary);
           renderEditAttacks();
           return;
         }
