@@ -2459,11 +2459,27 @@
           teaser: "This containment slot is reserved for a future boss encounter."
         },
       ];
+      const saveFileSlotDefs = [
+        { id: "main", defaultName: "Main Save" },
+        { id: "slot_a", defaultName: "Challenge Slot A" },
+        { id: "slot_b", defaultName: "Challenge Slot B" },
+        { id: "slot_c", defaultName: "Challenge Slot C" }
+      ];
       const storedVolume = Number.parseFloat(localStorage.getItem("aether_vortex_volume") || "0.65");
       const storedShake = localStorage.getItem("aether_vortex_screen_shake");
       const storedMenuMusicMuted = localStorage.getItem("aether_vortex_menu_music_muted");
       const storedBossMusicMuted = localStorage.getItem("aether_vortex_boss_music_muted");
+      const storedSaveSlots = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("aether_vortex_save_slots") || "{}");
+        } catch {
+          return {};
+        }
+      })();
+      const storedActiveSaveSlotId = localStorage.getItem("aether_vortex_active_save_slot") || "main";
       const storedProfile = (() => {
+        const activeSlot = storedSaveSlots?.[storedActiveSaveSlotId];
+        if (activeSlot?.profile) return activeSlot.profile;
         try {
           return JSON.parse(localStorage.getItem("aether_vortex_profile") || "{}");
         } catch {
@@ -2652,6 +2668,43 @@
           hiddenDesc: "????"
         }
       };
+      const challengeDefs = {
+        realistic: {
+          name: "Realistic",
+          desc: "Beat every active boss without dying once.",
+          noDeath: true
+        },
+        xl_griefing: {
+          name: "XL Griefing",
+          desc: "Beat every active boss using only XL moves. Normal bullets never deal damage."
+        },
+        do_you_hate_yourself: {
+          name: "Do you hate yourself?",
+          desc: "No XL, no ultimates, no other bullet types, 50% less bullet damage, no in-fight purchases, and no deaths.",
+          noDeath: true
+        },
+        please_do_not_attempt: {
+          name: "Please do NOT attempt this",
+          desc: "No XL, no ultimates, no other bullet types, 70% less bullet damage, no purchases, 1 health, no evolutions, and no deaths.",
+          noDeath: true
+        },
+        hunting_season: {
+          name: "Hunting Season",
+          desc: "Bullets are locked into shotgun mode for every boss."
+        },
+        stop_with_the_fallbacks: {
+          name: "Stop with the fallbacks! They're expensive.",
+          desc: "Only ultimates can damage bosses. Bullets can still score hits for points, but never deal boss damage."
+        },
+        where_the_heck_is_the_boss: {
+          name: "Where the heck is the boss?!",
+          desc: "Earn $1000.00 purely from Operations work."
+        },
+        hello_multiplier: {
+          name: "Hello everybody my name is multiplier",
+          desc: "Every boss enters with 3.5x its usual health. Beat every active boss under that pressure."
+        }
+      };
 
       const evolutionTierPrices = {
         5: 5999,
@@ -2781,6 +2834,20 @@
       function createDefaultProfile(source = {}) {
         const achievements = { ...(source.achievements || {}) };
         delete achievements.full_bloom;
+        const normalizeBossProgress = (input = {}) => ({
+          architect: Boolean(input.architect),
+          sovereign: Boolean(input.sovereign),
+          monarch: Boolean(input.monarch),
+          cesium: Boolean(input.cesium),
+          tantalum: Boolean(input.tantalum),
+          luminosity: Boolean(input.luminosity),
+          sili: Boolean(input.sili),
+          caesar: Boolean(input.caesar),
+          beauty: Boolean(input.beauty),
+          bleach: Boolean(input.bleach),
+          alarmist: Boolean(input.alarmist),
+          slabhraidh: Boolean(input.slabhraidh)
+        });
         const shop = {
           ownedUltimates: {
             graphic_reset: true,
@@ -2814,6 +2881,26 @@
             : 4
         };
         const selectedLoadout = shop.ownedUltimates[source.attackLoadout] ? source.attackLoadout : "graphic_reset";
+        const challengesSource = source.challenges || {};
+        const completedChallenges = {};
+        for (const id of Object.keys(challengeDefs)) {
+          completedChallenges[id] = Boolean(challengesSource.completed?.[id]);
+        }
+        const challengeProgress = {};
+        for (const id of Object.keys(challengeDefs)) {
+          challengeProgress[id] = {
+            defeatedBosses: normalizeBossProgress(challengesSource.progress?.[id]?.defeatedBosses),
+            bestOperationsCents: Number.isFinite(challengesSource.progress?.[id]?.bestOperationsCents)
+              ? Math.max(0, Math.round(challengesSource.progress[id].bestOperationsCents))
+              : 0,
+            startingOperationsCents: Number.isFinite(challengesSource.progress?.[id]?.startingOperationsCents)
+              ? Math.round(challengesSource.progress[id].startingOperationsCents)
+              : 0
+          };
+        }
+        const activeChallengeId = typeof challengesSource.activeId === "string" && challengeDefs[challengesSource.activeId]
+          ? challengesSource.activeId
+          : null;
         return {
           bestScore: Number.isFinite(source.bestScore) ? source.bestScore : 0,
           achievements,
@@ -2825,6 +2912,11 @@
             cents: Number.isFinite(source.operations?.cents) ? Math.round(source.operations.cents) : 0,
             wrongCount: Number.isFinite(source.operations?.wrongCount) ? Math.max(0, Math.round(source.operations.wrongCount)) : 0,
             cooldownUntil: Number.isFinite(source.operations?.cooldownUntil) ? source.operations.cooldownUntil : 0
+          },
+          challenges: {
+            activeId: activeChallengeId,
+            completed: completedChallenges,
+            progress: challengeProgress
           },
           shop,
           bossRecords: {
@@ -2922,6 +3014,7 @@
         operationsTimerSecond: null,
         pausePhasePanelOpen: false,
         achievementsTab: "main",
+        selectedChallengeId: "realistic",
         operationsJobs: [],
         operationsSelectedIndex: 0,
         operationsDragItem: null,
@@ -3252,6 +3345,8 @@
         profile: {
           ...createDefaultProfile(storedProfile)
         },
+        saveSlots: {},
+        activeSaveSlotId: storedActiveSaveSlotId,
         gameOverTimer: 0,
         gameOverBossName: "",
         gameOverReasonText: "",
@@ -3632,7 +3727,7 @@
           return;
         }
 
-        if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+        if (["menu", "operations", "save_files", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
           if (currentMusicTarget !== "menu") playMusic("menu");
           fadeMusic(menuMusic, getMenuMusicVolume(), 1);
           return;
@@ -3844,6 +3939,277 @@
 
       function saveProfile() {
         localStorage.setItem("aether_vortex_profile", JSON.stringify(state.profile));
+        if (state.saveSlots?.[state.activeSaveSlotId]) {
+          state.saveSlots[state.activeSaveSlotId].profile = JSON.parse(JSON.stringify(state.profile));
+          state.saveSlots[state.activeSaveSlotId].updatedAt = new Date().toISOString();
+          saveSaveSlots();
+        }
+      }
+
+      function createDefaultSaveSlots(source = {}) {
+        const slots = {};
+        for (const def of saveFileSlotDefs) {
+          const entry = source[def.id] || {};
+          slots[def.id] = {
+            id: def.id,
+            name: typeof entry.name === "string" && entry.name.trim() ? entry.name.trim().slice(0, 28) : def.defaultName,
+            updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
+            profile: entry.profile ? createDefaultProfile(entry.profile) : null
+          };
+        }
+        return slots;
+      }
+
+      function saveSaveSlots() {
+        localStorage.setItem("aether_vortex_save_slots", JSON.stringify(state.saveSlots));
+        localStorage.setItem("aether_vortex_active_save_slot", state.activeSaveSlotId);
+      }
+
+      function initializeSaveSlots() {
+        state.saveSlots = createDefaultSaveSlots(storedSaveSlots);
+        if (!state.saveSlots[state.activeSaveSlotId]) {
+          state.activeSaveSlotId = "main";
+        }
+        const activeSlot = state.saveSlots[state.activeSaveSlotId];
+        if (!activeSlot.profile) {
+          activeSlot.profile = JSON.parse(JSON.stringify(state.profile));
+          activeSlot.updatedAt = new Date().toISOString();
+          saveSaveSlots();
+        }
+      }
+
+      function getSaveSlotBossClearCount(profile) {
+        if (!profile?.bossRecords) return 0;
+        return bosses.reduce((count, boss, index) => count + (boss.active && profile.bossRecords[getBossRecordKey(index)] ? 1 : 0), 0);
+      }
+
+      function renameSaveSlot(id) {
+        const slot = state.saveSlots[id];
+        if (!slot) return;
+        const nextName = window.prompt("Rename save file", slot.name || "");
+        if (nextName === null) return;
+        slot.name = (nextName.trim() || saveFileSlotDefs.find((def) => def.id === id)?.defaultName || "Save File").slice(0, 28);
+        saveSaveSlots();
+      }
+
+      function saveCurrentProfileToSlot(id) {
+        const slot = state.saveSlots[id];
+        if (!slot) return;
+        slot.profile = JSON.parse(JSON.stringify(state.profile));
+        slot.updatedAt = new Date().toISOString();
+        state.activeSaveSlotId = id;
+        saveSaveSlots();
+      }
+
+      function loadSaveSlot(id) {
+        const slot = state.saveSlots[id];
+        if (!slot?.profile) return;
+        state.profile = createDefaultProfile(slot.profile);
+        state.activeSaveSlotId = id;
+        state.operationsJobs = [];
+        state.operationsSelectedIndex = 0;
+        state.achievementsTab = "main";
+        state.selectedChallengeId = getActiveChallengeId() || "realistic";
+        saveProfile();
+        loadCustomSkinImage();
+      }
+
+      function resetChallengeBossProgress(progress) {
+        progress.defeatedBosses = {
+          architect: false,
+          sovereign: false,
+          monarch: false,
+          cesium: false,
+          tantalum: false,
+          luminosity: false,
+          sili: false,
+          caesar: false,
+          beauty: false,
+          bleach: false,
+          alarmist: false,
+          slabhraidh: false
+        };
+      }
+
+      function getChallengeProgress(id) {
+        if (!state.profile.challenges.progress[id]) {
+          state.profile.challenges.progress[id] = { defeatedBosses: {}, bestOperationsCents: 0, startingOperationsCents: 0 };
+          resetChallengeBossProgress(state.profile.challenges.progress[id]);
+        }
+        if (!state.profile.challenges.progress[id].defeatedBosses) {
+          state.profile.challenges.progress[id].defeatedBosses = {};
+        }
+        for (const key of Object.keys(state.profile.bossRecords)) {
+          state.profile.challenges.progress[id].defeatedBosses[key] = Boolean(state.profile.challenges.progress[id].defeatedBosses[key]);
+        }
+        state.profile.challenges.progress[id].bestOperationsCents = Number.isFinite(state.profile.challenges.progress[id].bestOperationsCents)
+          ? Math.max(0, Math.round(state.profile.challenges.progress[id].bestOperationsCents))
+          : 0;
+        state.profile.challenges.progress[id].startingOperationsCents = Number.isFinite(state.profile.challenges.progress[id].startingOperationsCents)
+          ? Math.round(state.profile.challenges.progress[id].startingOperationsCents)
+          : 0;
+        return state.profile.challenges.progress[id];
+      }
+
+      function resetChallengeProgress(id) {
+        const progress = getChallengeProgress(id);
+        resetChallengeBossProgress(progress);
+        progress.bestOperationsCents = 0;
+        progress.startingOperationsCents = Math.round(state.profile.operations?.cents || 0);
+      }
+
+      function getActiveChallengeId() {
+        return state.profile.challenges?.activeId || null;
+      }
+
+      function getActiveChallengeDef() {
+        const id = getActiveChallengeId();
+        return id ? challengeDefs[id] || null : null;
+      }
+
+      function areChallengesUnlocked() {
+        return bosses.every((boss, index) => !boss.active || state.profile.bossRecords[getBossRecordKey(index)]);
+      }
+
+      function getChallengeCompletedBossCount(id) {
+        const progress = getChallengeProgress(id);
+        return bosses.reduce((count, boss, index) => count + (boss.active && progress.defeatedBosses[getBossRecordKey(index)] ? 1 : 0), 0);
+      }
+
+      function completeChallenge(id) {
+        if (state.profile.challenges.completed[id]) return;
+        state.profile.challenges.completed[id] = true;
+        state.profile.challenges.activeId = null;
+        saveProfile();
+      }
+
+      function markChallengeBossDefeated(bossKey) {
+        const challengeId = getActiveChallengeId();
+        if (!challengeId || challengeId === "where_the_heck_is_the_boss") return;
+        const progress = getChallengeProgress(challengeId);
+        progress.defeatedBosses[bossKey] = true;
+        const totalActiveBosses = bosses.filter((boss) => boss.active).length;
+        if (getChallengeCompletedBossCount(challengeId) >= totalActiveBosses) {
+          completeChallenge(challengeId);
+        } else {
+          saveProfile();
+        }
+      }
+
+      function failActiveChallenge() {
+        const challengeId = getActiveChallengeId();
+        if (!challengeId) return;
+        resetChallengeProgress(challengeId);
+        saveProfile();
+      }
+
+      function setActiveChallenge(id) {
+        if (!areChallengesUnlocked() || !challengeDefs[id]) return;
+        const current = getActiveChallengeId();
+        if (current === id) return;
+        if (current && current !== id) {
+          resetChallengeProgress(current);
+        }
+        state.profile.challenges.activeId = id;
+        resetChallengeProgress(id);
+        saveProfile();
+      }
+
+      function clearActiveChallenge() {
+        const current = getActiveChallengeId();
+        if (!current) return;
+        resetChallengeProgress(current);
+        state.profile.challenges.activeId = null;
+        saveProfile();
+      }
+
+      function getChallengeShotDamageMultiplier() {
+        const id = getActiveChallengeId();
+        if (id === "do_you_hate_yourself") return 0.5;
+        if (id === "please_do_not_attempt") return 0.3;
+        return 1;
+      }
+
+      function challengeBlocksUltimates() {
+        const id = getActiveChallengeId();
+        return id === "xl_griefing" || id === "do_you_hate_yourself" || id === "please_do_not_attempt";
+      }
+
+      function challengeBlocksXl() {
+        const id = getActiveChallengeId();
+        return id === "do_you_hate_yourself" || id === "please_do_not_attempt";
+      }
+
+      function challengeBlocksInFightPurchases() {
+        const id = getActiveChallengeId();
+        return id === "do_you_hate_yourself" || id === "please_do_not_attempt";
+      }
+
+      function challengeForcesStandardBullets() {
+        const id = getActiveChallengeId();
+        return id === "do_you_hate_yourself" || id === "please_do_not_attempt";
+      }
+
+      function challengeDisablesEvolutions() {
+        return getActiveChallengeId() === "please_do_not_attempt";
+      }
+
+      function challengeForcesShotgunMode() {
+        return getActiveChallengeId() === "hunting_season";
+      }
+
+      function challengeSuppressesBulletDamage() {
+        const id = getActiveChallengeId();
+        return id === "xl_griefing" || id === "stop_with_the_fallbacks";
+      }
+
+      function challengeSuppressesXlDamage() {
+        return getActiveChallengeId() === "stop_with_the_fallbacks";
+      }
+
+      function challengeUsesMultiplierHealth() {
+        return getActiveChallengeId() === "hello_multiplier";
+      }
+
+      function formatSaveSlotTimestamp(updatedAt) {
+        if (!updatedAt) return "Never";
+        const value = new Date(updatedAt);
+        if (Number.isNaN(value.getTime())) return "Never";
+        return value.toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        });
+      }
+
+      function getChallengeStatusText(id) {
+        if (state.profile.challenges.completed[id]) return "Completed";
+        if (getActiveChallengeId() === id) return "Active";
+        return "Inactive";
+      }
+
+      function getChallengeProgressText(id) {
+        if (id === "where_the_heck_is_the_boss") {
+          const progress = getChallengeProgress(id);
+          return `${formatMoney(progress.bestOperationsCents)} / $1000.00`;
+        }
+        const totalActiveBosses = bosses.filter((boss) => boss.active).length;
+        return `${getChallengeCompletedBossCount(id)} / ${totalActiveBosses} bosses`;
+      }
+
+      function syncOperationsChallengeProgress() {
+        const challengeId = getActiveChallengeId();
+        if (challengeId !== "where_the_heck_is_the_boss") return;
+        const progress = getChallengeProgress(challengeId);
+        const earnedDuringChallenge = Math.max(0, Math.round((state.profile.operations?.cents || 0) - (progress.startingOperationsCents || 0)));
+        progress.bestOperationsCents = Math.max(progress.bestOperationsCents || 0, earnedDuringChallenge);
+        if (progress.bestOperationsCents >= 100000) {
+          completeChallenge(challengeId);
+        } else {
+          saveProfile();
+        }
       }
 
       function resetProfileData() {
@@ -3939,6 +4305,7 @@
       }
 
       function getMaxEvolutionTier() {
+        if (challengeDisablesEvolutions()) return 1;
         return clamp(state.profile.shop?.maxEvolutionTier || 4, 4, 7);
       }
 
@@ -4264,6 +4631,7 @@
           state.operationsFeedback = "Operations access revoked for 01:00 due to repeated mistakes.";
           state.operationsFeedbackTone = "negative";
         }
+        syncOperationsChallengeProgress();
         saveProfile();
       }
 
@@ -4566,6 +4934,7 @@
             state.operationsFeedback = "Operations access revoked for 01:00 due to repeated mistakes.";
           }
         }
+        syncOperationsChallengeProgress();
         saveProfile();
       }
 
@@ -4681,6 +5050,12 @@
                   <span class="menu-button-meta">${operationsLocked ? `Locked ${operationsTimer}` : "Office side work and routine cash jobs."}</span>
                 </span>
               </button>
+              <button class="menu-button menu-hoverable" data-nav="save_files">
+                <span class="menu-button-stack">
+                  <span>Save Files</span>
+                  <span class="menu-button-meta">Rename, branch, and load in-game save slots for challenge runs.</span>
+                </span>
+              </button>
               <button class="menu-button menu-hoverable" data-nav="edit_attacks">
                 <span class="menu-button-stack">
                   <span>Shop</span>
@@ -4695,13 +5070,60 @@
               </button>
               <button class="menu-button menu-hoverable" data-nav="achievements">
                 <span class="menu-button-stack">
-                  <span>Achievements</span>
-                  <span class="menu-button-meta">Review your unlocks, progress milestones, and hidden signals.</span>
+                  <span>Achievements and Challenges</span>
+                  <span class="menu-button-meta">Review unlocks, hidden signals, and endgame challenge runs.</span>
                 </span>
               </button>
             </div>
             <div>
               <div class="menu-footer">Best Score ${String(Math.floor(state.profile.bestScore)).padStart(6, "0")} / Achievements ${unlockedCount}/${Object.keys(achievementDefs).length + Object.keys(secretAchievementDefs).length}</div>
+            </div>
+          </div>
+        `;
+        overlay.classList.add("show");
+        updateHudVisibility();
+      }
+
+      function renderSaveFiles() {
+        clearDeathOverlayState();
+        state.mode = "save_files";
+        const activeChallengeId = getActiveChallengeId();
+        const cards = saveFileSlotDefs.map((def) => {
+          const slot = state.saveSlots[def.id];
+          const profile = slot?.profile;
+          const clears = getSaveSlotBossClearCount(profile);
+          const bestScore = profile?.bestScore ? Math.floor(profile.bestScore) : 0;
+          const funds = formatMoney(profile?.operations?.cents || 0);
+          const activeChallengeName = profile?.challenges?.activeId ? (challengeDefs[profile.challenges.activeId]?.name || "Unknown Challenge") : "None";
+          const isActive = state.activeSaveSlotId === def.id;
+          return `
+            <article class="config-card">
+              <div class="title">${isActive ? "Active Autosave" : "Save Slot"}</div>
+              <div class="value" style="font-size: 24px; margin-top: 6px;">${slot?.name || def.defaultName}</div>
+              <p class="boss-card-copy" style="margin-top: 10px;">Updates automatically while active. Use a side slot to protect your main profile for challenge routes.</p>
+              <div class="menu-footer" style="text-align:left; margin-top: 10px;">Updated ${formatSaveSlotTimestamp(slot?.updatedAt)}</div>
+              <div class="menu-footer" style="text-align:left;">Boss Clears ${clears}/${bosses.filter((boss) => boss.active).length} · Best Score ${String(bestScore).padStart(6, "0")}</div>
+              <div class="menu-footer" style="text-align:left;">Funds ${funds} · Challenge ${activeChallengeName}</div>
+              <div class="config-actions" style="margin-top: 14px;">
+                <button class="config-toggle menu-hoverable" data-save-rename="${def.id}">Rename</button>
+                <button class="config-toggle menu-hoverable" data-save-sync="${def.id}">${isActive ? "Save Now" : "Use Current Save Here"}</button>
+                <button class="menu-button menu-hoverable" data-save-load="${def.id}" ${profile ? "" : "disabled"}>${isActive ? "Reload Active" : "Load"}</button>
+              </div>
+            </article>
+          `;
+        }).join("");
+        overlay.innerHTML = `
+          <div class="menu-shell compact-shell">
+            <div class="menu-header">
+              <div class="menu-header-copy">
+                <h1 class="menu-title">Save Files</h1>
+                <div class="menu-subtitle">In-game save branches for challenge attempts, reroutes, and safe profile backups.</div>
+              </div>
+              <button class="menu-button menu-hoverable" data-nav="menu">Back</button>
+            </div>
+            <div class="operations-feedback">Current active save: <strong>${state.saveSlots[state.activeSaveSlotId]?.name || "Main Save"}</strong>${activeChallengeId ? ` · Active challenge: ${challengeDefs[activeChallengeId]?.name || "Unknown"}` : ""}</div>
+            <div class="config-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+              ${cards}
             </div>
           </div>
         `;
@@ -4818,9 +5240,11 @@
         clearDeathOverlayState();
         state.mode = "achievements";
         const unlocked = state.profile.achievements || {};
-        const activeTab = state.achievementsTab === "secret" ? "secret" : "main";
+        const activeTab = state.achievementsTab === "secret" ? "secret" : state.achievementsTab === "challenges" ? "challenges" : "main";
         const sourceDefs = activeTab === "secret" ? secretAchievementDefs : achievementDefs;
-        const cards = Object.entries(sourceDefs).map(([id, def]) => {
+        const cards = activeTab === "challenges"
+          ? ""
+          : Object.entries(sourceDefs).map(([id, def]) => {
           const entry = unlocked[id];
           const unlockedAt = entry?.unlockedAt ? new Date(entry.unlockedAt).toLocaleDateString() : null;
           const title = activeTab === "secret" && !entry ? def.hiddenTitle : def.title;
@@ -4834,21 +5258,66 @@
             </article>
           `;
         }).join("");
+        const challengesUnlocked = areChallengesUnlocked();
+        const selectedChallengeId = challengeDefs[state.selectedChallengeId] ? state.selectedChallengeId : Object.keys(challengeDefs)[0];
+        state.selectedChallengeId = selectedChallengeId;
+        const selectedChallenge = challengeDefs[selectedChallengeId];
+        const completedChallengeCards = Object.entries(challengeDefs)
+          .filter(([id]) => state.profile.challenges.completed[id])
+          .map(([id, def]) => `<div class="menu-footer" style="text-align:left;">${def.name} · Cleared</div>`)
+          .join("");
+        const challengeContent = !challengesUnlocked
+          ? `
+            <div class="config-card" style="grid-column: 1 / -1;">
+              <div class="title">Locked</div>
+              <div class="value" style="font-size: 24px; margin-top: 6px;">Challenges Unavailable</div>
+              <p class="boss-card-copy" style="margin-top: 10px;">Beat every active boss in the game once to unlock challenge runs and their separate progress tracking.</p>
+            </div>
+          `
+          : `
+            <section class="config-card">
+              <div class="title">Challenge Select</div>
+              <div class="value" style="font-size: 22px; margin-top: 6px;">${selectedChallenge.name}</div>
+              <p class="boss-card-copy" style="margin-top: 10px;">${selectedChallenge.desc}</p>
+              <div class="menu-footer" style="text-align:left; margin-top: 10px;">Status ${getChallengeStatusText(selectedChallengeId)} · Progress ${getChallengeProgressText(selectedChallengeId)}</div>
+              <div class="config-actions" style="margin-top: 14px;">
+                <button class="menu-button menu-hoverable" data-challenge-activate="${selectedChallengeId}" ${state.profile.challenges.completed[selectedChallengeId] ? "disabled" : ""}>${getActiveChallengeId() === selectedChallengeId ? "Active Challenge" : "Activate Challenge"}</button>
+                <button class="config-toggle menu-hoverable" data-challenge-clear ${getActiveChallengeId() ? "" : "disabled"}>Turn Off Challenge</button>
+              </div>
+              <div class="config-grid" style="grid-template-columns: 1fr; margin-top: 18px;">
+                ${Object.entries(challengeDefs).map(([id, def]) => `
+                  <button class="attack-option ${id === selectedChallengeId ? "active" : ""}" data-challenge-select="${id}">
+                    <strong>${def.name}</strong>
+                    <span>${getChallengeStatusText(id)} · ${getChallengeProgressText(id)}</span>
+                  </button>
+                `).join("")}
+              </div>
+            </section>
+            <section class="config-card">
+              <div class="title">Challenges Beaten</div>
+              <div class="value" style="font-size: 22px; margin-top: 6px;">${Object.values(state.profile.challenges.completed).filter(Boolean).length}/${Object.keys(challengeDefs).length}</div>
+              <p class="boss-card-copy" style="margin-top: 10px;">Completed challenges stay recorded even after you swap save files or deactivate a live run.</p>
+              <div style="margin-top: 14px;">
+                ${completedChallengeCards || `<div class="menu-footer" style="text-align:left;">No completed challenge clears yet.</div>`}
+              </div>
+            </section>
+          `;
         overlay.innerHTML = `
           <div class="menu-shell compact-shell">
             <div class="menu-header">
               <div class="menu-header-copy">
-                <h1 class="menu-title">Achievements</h1>
-                <div class="menu-subtitle">Review every decoded combat milestone</div>
+                <h1 class="menu-title">Achievements and Challenges</h1>
+                <div class="menu-subtitle">Review decoded milestones, hidden signals, and endgame gauntlets.</div>
               </div>
               <button class="menu-button menu-hoverable" data-nav="menu">Back</button>
             </div>
             <div class="config-actions" style="justify-content:center; margin-bottom:18px;">
               <button class="config-toggle menu-hoverable ${activeTab === "main" ? "active" : ""}" data-achievement-tab="main">Achievements</button>
               <button class="config-toggle menu-hoverable ${activeTab === "secret" ? "active" : ""}" data-achievement-tab="secret">Secret Achievements</button>
+              <button class="config-toggle menu-hoverable ${activeTab === "challenges" ? "active" : ""}" data-achievement-tab="challenges" ${challengesUnlocked ? "" : "disabled"}>${challengesUnlocked ? "Challenges" : "Challenges Locked"}</button>
             </div>
             <div class="config-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
-              ${cards}
+              ${activeTab === "challenges" ? challengeContent : cards}
             </div>
           </div>
         `;
@@ -5588,6 +6057,9 @@
         resetGame("cutscene");
         state.currentBoss = index === 11 ? "slabhraidh" : index === 10 ? "alarmist" : index === 9 ? "bleach" : index === 8 ? "beauty" : index === 7 ? "caesar" : index === 6 ? "sili" : index === 5 ? "luminosity" : index === 4 ? "tantalum" : index === 3 ? "cesium" : index === 2 ? "monarch" : "sovereign";
         state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : state.currentBoss === "caesar" ? 4700 : state.currentBoss === "beauty" ? 5400 : state.currentBoss === "bleach" ? 6200 : state.currentBoss === "alarmist" ? 6900 : state.currentBoss === "slabhraidh" ? 7600 : 2400;
+        if (challengeUsesMultiplierHealth()) {
+          state.bossMaxHealth *= 3.5;
+        }
         state.bossHealth = state.bossMaxHealth;
         state.bossPhase = 1;
         state.cutsceneTime = 0;
@@ -5695,7 +6167,7 @@
         player.damageUpgradeLevel = 0;
         player.damageMultiplier = 1;
         player.healthBufferBuys = 0;
-        player.maxHealth = player.baseMaxHealth;
+        player.maxHealth = getActiveChallengeId() === "please_do_not_attempt" ? 1 : player.baseMaxHealth;
         player.health = player.maxHealth;
         player.strain = player.maxStrain;
         player.hasUsedSlow = false;
@@ -5713,6 +6185,9 @@
       }
 
       function onGameOver(options = {}) {
+        if (getActiveChallengeDef()?.noDeath) {
+          failActiveChallenge();
+        }
         updateProfileStats();
         saveProfile();
         ensureMusicPlayers();
@@ -5772,7 +6247,7 @@
 
       function buyDamageUpgrade() {
         const cost = 500;
-        if (state.mode !== "paused" || player.damageUpgradeLevel >= 4 || state.score < cost) return;
+        if (state.mode !== "paused" || player.damageUpgradeLevel >= 4 || state.score < cost || challengeBlocksInFightPurchases()) return;
         state.score -= cost;
         player.damageUpgradeLevel += 1;
         player.damageMultiplier = 1 + player.damageUpgradeLevel * 0.1;
@@ -5782,7 +6257,7 @@
 
       function buyHealthBuffer() {
         const cost = 600;
-        if (state.mode !== "paused" || player.healthBufferBuys >= 6 || state.score < cost) return;
+        if (state.mode !== "paused" || player.healthBufferBuys >= 6 || state.score < cost || challengeBlocksInFightPurchases()) return;
         state.score -= cost;
         player.healthBufferBuys += 1;
         player.maxHealth += 0.5;
@@ -6309,7 +6784,7 @@
       }
 
       function useUltimate() {
-        if (state.mode !== "playing" || state.ultimateCharge < 100) return;
+        if (state.mode !== "playing" || state.ultimateCharge < 100 || challengeBlocksUltimates()) return;
         const loadout = state.profile.attackLoadout || "graphic_reset";
         state.usedUltimateThisRun = true;
         state.ultimateCharge = 0;
@@ -6328,7 +6803,7 @@
         if (loadout === "fps_unlock") {
           state.fpsUnlockTimer = 8;
           state.fpsUnlockGlitchTimer = 1.6;
-          damageBoss(state.bossMaxHealth * 0.3, { awardCharge: false });
+          damageBoss(state.bossMaxHealth * 0.3, { awardCharge: false, source: "ultimate" });
           addFlash(player.x, player.y, "rgba(145, 230, 255, 0.72)", 200);
           addSpark(player.x, player.y, "rgba(214, 247, 255, 0.95)", 34, 240);
           return;
@@ -6337,7 +6812,7 @@
         if (loadout === "macro_burst") {
           clearEnemyHazards();
           state.macroBurstTimer = 6;
-          damageBoss(state.bossMaxHealth * 0.26, { awardCharge: false });
+          damageBoss(state.bossMaxHealth * 0.26, { awardCharge: false, source: "ultimate" });
           addFlash(player.x, player.y, "rgba(255, 189, 116, 0.74)", 210);
           addSpark(player.x, player.y, "rgba(255, 225, 160, 0.96)", 40, 250);
           return;
@@ -6346,14 +6821,14 @@
         if (loadout === "root_override") {
           clearEnemyHazards();
           state.rootOverrideTimer = 7.5;
-          damageBoss(state.bossMaxHealth * 0.32, { awardCharge: false });
+          damageBoss(state.bossMaxHealth * 0.32, { awardCharge: false, source: "ultimate" });
           addFlash(player.x, player.y, "rgba(255, 236, 178, 0.78)", 240);
           addSpark(player.x, player.y, "rgba(255, 245, 208, 0.98)", 48, 280);
           return;
         }
 
         clearEnemyHazards();
-        damageBoss(state.bossMaxHealth * 0.2, { awardCharge: false });
+        damageBoss(state.bossMaxHealth * 0.2, { awardCharge: false, source: "ultimate" });
         addFlash(centerX, centerY, "rgba(255, 255, 255, 0.95)", Math.max(width, height) * 0.9);
         addSpark(centerX, centerY, "rgba(255, 255, 255, 0.95)", 80, 360);
       }
@@ -6410,7 +6885,7 @@
       }
 
       function useXlBullet() {
-        if (state.mode !== "playing" || state.xlAmmo <= 0) return;
+        if (state.mode !== "playing" || state.xlAmmo <= 0 || challengeBlocksXl()) return;
         const xlId = state.profile.shop?.selectedXlBullet || "twin_hunter";
         const meta = xlBulletDefs[xlId] || xlBulletDefs.twin_hunter;
         state.usedXlThisRun = true;
@@ -6462,11 +6937,17 @@
           90
         );
         if (player.health <= 0) {
+          if (getActiveChallengeDef()?.noDeath) {
+            failActiveChallenge();
+          }
           onGameOver();
         }
       }
 
       function getSelectedPrimaryBulletMeta() {
+        if (challengeForcesStandardBullets()) {
+          return primaryBulletDefs.signal_standard;
+        }
         const id = state.profile.shop?.selectedPrimaryBullet || "signal_standard";
         return primaryBulletDefs[id] || primaryBulletDefs.signal_standard;
       }
@@ -6528,10 +7009,10 @@
         const targetHealth = state.bossMaxHealth * 0.02;
         if (survives) {
           if (state.bossHealth > targetHealth) {
-            damageBoss(state.bossHealth - targetHealth, { awardCharge: false });
-          } else {
-            damageBoss(state.bossHealth, { awardCharge: false });
-          }
+          damageBoss(state.bossHealth - targetHealth, { awardCharge: false, source: "xl" });
+        } else {
+          damageBoss(state.bossHealth, { awardCharge: false, source: "xl" });
+        }
         } else {
           state.bossHealth = Math.max(targetHealth, Math.min(state.bossHealth, Math.max(1, state.bossMaxHealth * 0.01)));
         }
@@ -10677,6 +11158,7 @@
           unlockHBombSecret();
         }
         state.profile.bossRecords[state.currentBoss] = true;
+        markChallengeBossDefeated(state.currentBoss);
         if (player.health >= 1) awardAchievement("survivor");
         if (!state.tookDamageThisRun) awardAchievement("no_damage_win");
         saveProfile();
@@ -10685,7 +11167,13 @@
 
       function damageBoss(amount, options = {}) {
         if (state.mode !== "playing" || state.bossHealth <= 0) return;
-        const { awardCharge = true, allowSurvivalFinish = false } = options;
+        const { awardCharge = true, allowSurvivalFinish = false, source = "generic" } = options;
+        if ((source === "bullet" && challengeSuppressesBulletDamage()) || (source === "xl" && challengeSuppressesXlDamage())) {
+          if (source === "bullet") {
+            addScore(2);
+          }
+          return;
+        }
         state.bossHealth = Math.max(0, state.bossHealth - amount);
         if (awardCharge) {
           state.ultimateCharge = clamp(state.ultimateCharge + (amount / Math.max(1, state.bossMaxHealth)) * 42, 0, 100);
@@ -10788,7 +11276,9 @@
           10: [0, -0.045, 0.045, -0.09, 0.09, -0.135, 0.135, -0.19, 0.19, -0.255, 0.255, -0.33, 0.33, -0.415, 0.415, -0.51, 0.51],
           11: [0, -0.04, 0.04, -0.08, 0.08, -0.12, 0.12, -0.17, 0.17, -0.23, 0.23, -0.3, 0.3, -0.38, 0.38, -0.47, 0.47, -0.57, 0.57]
         };
-        const baseOffsets = spreadPatterns[level] || spreadPatterns[11];
+        const baseOffsets = challengeForcesShotgunMode()
+          ? [-0.42, -0.27, -0.14, 0, 0.14, 0.27, 0.42]
+          : spreadPatterns[level] || spreadPatterns[11];
         const focusedFire = (input.mouseDown || input.mobileFocus || actionPressed("focus")) && level > 1;
         const focusRangeFactor = {
           2: 0.75,
@@ -10814,7 +11304,9 @@
           10: 0.39,
           11: 0.36
         };
-        const shotOffsets = focusedFire
+        const shotOffsets = challengeForcesShotgunMode()
+          ? baseOffsets
+          : focusedFire
           ? baseOffsets.map((offset) => offset * (focusRangeFactor[level] || 0.5))
           : baseOffsets;
         const muzzleX = player.x + Math.cos(player.angle) * 18;
@@ -10823,7 +11315,7 @@
         const macroActive = state.macroBurstTimer > 0;
         const rootActive = state.rootOverrideTimer > 0;
         const codeBoost = rootActive ? 1.3 : macroActive ? 1.18 : 1;
-        const shotDamage = (1 + (level - 1) * 0.45) * player.damageMultiplier * (bruteforceActive ? 1.15 : 1) * codeBoost;
+        const shotDamage = ((1 + (level - 1) * 0.45) * player.damageMultiplier * (bruteforceActive ? 1.15 : 1) * codeBoost) * getChallengeShotDamageMultiplier();
         const shotLife = focusedFire ? (focusLife[level] || 1.2) : 1.2;
         const primaryMeta = getSelectedPrimaryBulletMeta();
         if (primaryMeta.type === "orbital_strike") {
@@ -11062,14 +11554,14 @@
             if (shot.type !== "tick_phaser") return false;
             tickTouching = true;
             if (!shot.hasInitialImpact) {
-              damageBoss(shot.initialDamage);
+              damageBoss(shot.initialDamage, { source: "bullet" });
               shot.hasInitialImpact = true;
               shot.tickTimer = shot.tickInterval;
               addSpark(shot.x, shot.y, sparkColor, 5, 100);
             } else {
               shot.tickTimer -= dt;
               if (shot.tickTimer <= 0) {
-                damageBoss(shot.tickDamage);
+                damageBoss(shot.tickDamage, { source: "bullet" });
                 shot.tickTimer = shot.tickInterval;
                 addSpark(shot.x, shot.y, sparkColor, 4, 84);
               }
@@ -11093,7 +11585,7 @@
             for (const panel of getTantalumPanelStates()) {
               if (Math.abs(shot.x - panel.x) < panel.width * 0.6 + shot.size && Math.abs(shot.y - panel.y) < panel.height * 0.7 + shot.size) {
                 if (shot.phasesHazards) continue;
-                damageBoss(0.5);
+                damageBoss(0.5, { source: "bullet" });
                 addSpark(shot.x, shot.y, "rgba(146, 245, 255, 0.95)", 7, 115);
                 state.playerShots.splice(i, 1);
                 shot.life = 0;
@@ -11123,7 +11615,7 @@
                 if (shot.type === "tick_phaser") {
                   applyTickPhaserContact(sparkColor);
                 } else {
-                  damageBoss(shot.damage);
+                  damageBoss(shot.damage, { source: "bullet" });
                   addSpark(shot.x, shot.y, sparkColor, 6, 120);
                   state.playerShots.splice(i, 1);
                 }
@@ -11138,7 +11630,7 @@
               const railDist = Math.hypot(shot.x - rail.x, shot.y - rail.y);
               if (railDist < rail.thickness + shot.size + 3) {
                 if (shot.phasesHazards) continue;
-                damageBoss(0.5);
+                damageBoss(0.5, { source: "bullet" });
                 addSpark(shot.x, shot.y, "rgba(214, 255, 224, 0.96)", 6, 120);
                 if (state.caesar.railCounterCooldowns[rail.index] <= 0) {
                   spawnCaesarRailCounter(rail);
@@ -11158,7 +11650,7 @@
                 if (shot.type === "tick_phaser") {
                   applyTickPhaserContact("rgba(238, 255, 224, 0.96)");
                 } else {
-                  damageBoss(shot.damage);
+                  damageBoss(shot.damage, { source: "bullet" });
                   addSpark(shot.x, shot.y, "rgba(238, 255, 224, 0.96)", 6, 120);
                 }
                 if (state.bleach.phase === 3 && shot.type !== "tick_phaser") {
@@ -11180,7 +11672,7 @@
             for (const bar of getSlabhraidhBarStates()) {
               if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2)) {
                 if (shot.phasesHazards) continue;
-                damageBoss(0.5);
+                damageBoss(0.5, { source: "bullet" });
                 addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
                 state.playerShots.splice(i, 1);
                 hitSlabhraidh = true;
@@ -11191,7 +11683,7 @@
               for (const det of state.slabhraidh.phase4DetachedBars) {
                 if (slabhraidhPointOnBar(det, shot.x, shot.y, shot.size + 2)) {
                   if (shot.phasesHazards) continue;
-                  damageBoss(0.5);
+                  damageBoss(0.5, { source: "bullet" });
                   addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
                   state.playerShots.splice(i, 1);
                   hitSlabhraidh = true;
@@ -11201,7 +11693,7 @@
             }
             if (!hitSlabhraidh && state.slabhraidh.detachedBar && slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2)) {
               if (shot.phasesHazards) continue;
-              damageBoss(0.5);
+              damageBoss(0.5, { source: "bullet" });
               addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
               state.playerShots.splice(i, 1);
               hitSlabhraidh = true;
@@ -11210,7 +11702,7 @@
               if (shot.type === "tick_phaser") {
                 applyTickPhaserContact("rgba(255, 210, 150, 0.96)");
               } else {
-                damageBoss(shot.damage);
+                damageBoss(shot.damage, { source: "bullet" });
                 addSpark(shot.x, shot.y, "rgba(255, 210, 150, 0.96)", 6, 120);
                 state.playerShots.splice(i, 1);
               }
@@ -11324,7 +11816,7 @@
               if (shot.type === "tick_phaser") {
                 applyTickPhaserContact("rgba(255, 220, 184, 0.9)");
               } else {
-                damageBoss(shot.damage);
+                damageBoss(shot.damage, { source: "bullet" });
               }
               if (shot.type !== "tick_phaser" && state.alarmist.hitFxCooldown <= 0) {
                 addSpark(shot.x, shot.y, "rgba(255, 220, 184, 0.9)", 4, 96);
@@ -11348,7 +11840,7 @@
               if (shot.type === "tick_phaser") {
                 applyTickPhaserContact("rgba(255, 215, 106, 0.95)");
               } else {
-                damageBoss(shot.damage);
+                damageBoss(shot.damage, { source: "bullet" });
               }
             }
             if (shot.type !== "tick_phaser") {
@@ -11406,7 +11898,7 @@
             if (missile.type === "h_bomb") {
               triggerHBombImpactOutcome(missile);
             } else {
-              damageBoss(missile.damage, { awardCharge: false });
+              damageBoss(missile.damage, { awardCharge: false, source: "xl" });
               addFlash(missile.x, missile.y, missile.color.replace(/[\d.]+\)$/, "0.45)"), 80);
               addSpark(missile.x, missile.y, missile.accent, 16, 180);
             }
@@ -11483,7 +11975,7 @@
           return;
         }
 
-        if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+        if (["menu", "operations", "save_files", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
           if (state.mode === "menu" && isOperationsLocked()) {
             const seconds = Math.ceil(getOperationsCooldownRemainingMs() / 1000);
             if (state.operationsTimerSecond !== seconds) {
@@ -18120,7 +18612,7 @@
           drawSlabhraidhBoss();
         } else if (state.mode === "loading") {
           // Keep loading visuals isolated to the overlay shell.
-        } else if (["menu", "operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+        } else if (["menu", "operations", "save_files", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
           drawMenuAmbientBosses();
         } else {
           drawVortex();
@@ -18608,6 +19100,7 @@
           const destination = nav.dataset.nav;
           if (destination === "menu") renderMainMenu();
           if (destination === "operations") renderOperations();
+          if (destination === "save_files") renderSaveFiles();
           if (destination === "boss_select") renderBossSelect();
           if (destination === "config") renderConfig();
           if (destination === "achievements") renderAchievements();
@@ -18617,7 +19110,70 @@
 
         const achievementTab = event.target.closest("[data-achievement-tab]");
         if (achievementTab) {
-          state.achievementsTab = achievementTab.dataset.achievementTab === "secret" ? "secret" : "main";
+          state.achievementsTab = achievementTab.dataset.achievementTab === "secret"
+            ? "secret"
+            : achievementTab.dataset.achievementTab === "challenges"
+            ? "challenges"
+            : "main";
+          renderAchievements();
+          return;
+        }
+
+        const saveRename = event.target.closest("[data-save-rename]");
+        if (saveRename) {
+          renameSaveSlot(saveRename.dataset.saveRename);
+          renderSaveFiles();
+          return;
+        }
+
+        const saveSync = event.target.closest("[data-save-sync]");
+        if (saveSync) {
+          const id = saveSync.dataset.saveSync;
+          const targetSlot = state.saveSlots[id];
+          if (id !== state.activeSaveSlotId && targetSlot?.profile && !window.confirm(`Overwrite ${targetSlot.name} with your current run and make it the active autosave?`)) {
+            return;
+          }
+          saveCurrentProfileToSlot(id);
+          renderSaveFiles();
+          return;
+        }
+
+        const saveLoad = event.target.closest("[data-save-load]");
+        if (saveLoad) {
+          const id = saveLoad.dataset.saveLoad;
+          if (id !== state.activeSaveSlotId && !window.confirm(`Load ${state.saveSlots[id]?.name || "this save file"}? Unsaved progress in the current slot will be replaced by that save's data.`)) {
+            return;
+          }
+          loadSaveSlot(id);
+          renderSaveFiles();
+          return;
+        }
+
+        const challengeSelect = event.target.closest("[data-challenge-select]");
+        if (challengeSelect) {
+          state.selectedChallengeId = challengeSelect.dataset.challengeSelect;
+          renderAchievements();
+          return;
+        }
+
+        const challengeActivate = event.target.closest("[data-challenge-activate]");
+        if (challengeActivate) {
+          const id = challengeActivate.dataset.challengeActivate;
+          const current = getActiveChallengeId();
+          if (current && current !== id && !window.confirm("Switching challenges wipes the current challenge's progress. Continue?")) {
+            return;
+          }
+          setActiveChallenge(id);
+          renderAchievements();
+          return;
+        }
+
+        if (event.target.closest("[data-challenge-clear]")) {
+          if (!getActiveChallengeId()) return;
+          if (!window.confirm("Turning off the active challenge will erase its current progress. Continue?")) {
+            return;
+          }
+          clearActiveChallenge();
           renderAchievements();
           return;
         }
@@ -18908,7 +19464,7 @@
 
         if (event.code === getControlBinding("pause")) {
           event.preventDefault();
-          if (["operations", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+          if (["operations", "save_files", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
             renderMainMenu();
             return;
           }

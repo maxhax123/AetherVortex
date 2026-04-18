@@ -1,0 +1,326 @@
+            state.primaryCharge = {
+              type: "orbital_strike",
+              timer: 1.7,
+              offsets: [...shotOffsets],
+              damage: shotDamage * 8,
+              size: Math.max(4.8, (3 + level * 0.4) * 1.5),
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive
+            };
+            addFlash(player.x, player.y, "rgba(255, 180, 94, 0.22)", 52);
+            addSpark(muzzleX, muzzleY, "rgba(255, 210, 148, 0.95)", 8 + level, 108);
+          }
+          return 1.78;
+        }
+        for (const offset of shotOffsets) {
+          const angle = player.angle + offset;
+          const baseSize = (3 + level * 0.32) * (bruteforceActive ? 1.1 : 1) * (rootActive ? 1.08 : 1);
+          if (primaryMeta.type === "spark_targets") {
+            createPlayerShot(muzzleX, muzzleY, angle, 470, shotLife * 1.85, Math.max(2.8, baseSize * 0.86), shotDamage * 0.1, {
+              type: "spark_targets",
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: state.elapsed * 8 + offset * 12,
+              rotationSpeed: 8.5
+            });
+          } else if (primaryMeta.type === "tick_phaser") {
+            createPlayerShot(muzzleX, muzzleY, angle, 560, shotLife * 1.45, Math.max(3.2, baseSize * 1.02), shotDamage * 0.9, {
+              type: "tick_phaser",
+              initialDamage: shotDamage * 0.9,
+              tickDamage: shotDamage * 1.2,
+              tickTimer: 0.1,
+              tickInterval: 0.1,
+              phasesHazards: true,
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: angle,
+              rotationSpeed: 0
+            });
+          } else {
+            createPlayerShot(muzzleX, muzzleY, angle, 620, shotLife, baseSize, shotDamage, {
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive
+            });
+          }
+        }
+        addSpark(muzzleX, muzzleY, "rgba(255, 215, 106, 0.95)", 6 + level, 100);
+        return null;
+      }
+
+      function getSlabhraidhSlickControl() {
+        if (state.currentBoss !== "slabhraidh" || state.mode !== "playing") {
+          return { move: 1, turn: 1, damping: 4.4 };
+        }
+        for (const slick of state.slabhraidh.slicks) {
+          if (Math.hypot(player.x - slick.x, player.y - slick.y) < slick.radius + player.hitRadius) {
+            return { move: 0.68, turn: 0.52, damping: 0.7 };
+          }
+        }
+        return { move: 1, turn: 1, damping: 4.4 };
+      }
+
+      function updatePlayer(dt) {
+        const fpsUnlockActive = state.fpsUnlockTimer > 0;
+        const macroActive = state.macroBurstTimer > 0;
+        const rootActive = state.rootOverrideTimer > 0;
+        const tantalumSlow = isPlayerInTantalumAura() ? 0.65 : 1;
+        const slabhraidhSlick = getSlabhraidhSlickControl();
+        let thrust = 0;
+        const turnSpeed = player.turnSpeed * (fpsUnlockActive ? 1.22 : rootActive ? 1.18 : macroActive ? 1.1 : 1) * slabhraidhSlick.turn;
+        const moveSpeed = player.moveSpeed * (fpsUnlockActive ? 1.15 : rootActive ? 1.12 : macroActive ? 1.08 : 1) * tantalumSlow * slabhraidhSlick.move;
+        const reverseSpeed = player.reverseSpeed * (fpsUnlockActive ? 1.12 : rootActive ? 1.1 : macroActive ? 1.06 : 1) * tantalumSlow * slabhraidhSlick.move;
+        if (actionPressed("turn_left")) player.angle -= turnSpeed * dt;
+        if (actionPressed("turn_right")) player.angle += turnSpeed * dt;
+        if (input.mobileTurnLeft) player.angle -= turnSpeed * dt;
+        if (input.mobileTurnRight) player.angle += turnSpeed * dt;
+        if (actionPressed("thrust_forward")) thrust += moveSpeed;
+        if (actionPressed("thrust_reverse")) thrust -= reverseSpeed;
+
+        if (thrust !== 0) {
+          player.x += Math.cos(player.angle) * thrust * dt;
+          player.y += Math.sin(player.angle) * thrust * dt;
+        }
+
+        if (input.mobileJoystickActive) {
+          input.touchAimActive = true;
+          input.mouseX = player.x + input.mobileJoystickX * 180;
+          input.mouseY = player.y + input.mobileJoystickY * 180;
+          input.hasMouse = true;
+        }
+
+        if (input.hasMouse || input.touchAimActive) {
+          const dx = input.mouseX - player.x;
+          const dy = input.mouseY - player.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance > 1) {
+            const response = fpsUnlockActive ? 8.4 : 5.2;
+            const maxStep = moveSpeed * dt * (fpsUnlockActive ? 1.18 : 1);
+            const step = Math.min(maxStep, distance * response * dt);
+            player.x += (dx / distance) * step;
+            player.y += (dy / distance) * step;
+          }
+        }
+
+        player.x += player.pullVx * dt;
+        player.y += player.pullVy * dt;
+        const pullDamping = Math.max(0, 1 - dt * (slabhraidhSlick.damping));
+        player.pullVx *= pullDamping;
+        player.pullVy *= pullDamping;
+
+        player.x = clamp(player.x, 30, width - 30);
+        player.y = clamp(player.y, 30, height - 30);
+
+        if (state.primaryCharge) {
+          state.primaryCharge.timer -= dt;
+          if (state.primaryCharge.timer <= 0) {
+            releaseOrbitalStrikeCharge();
+          }
+        }
+
+        const toggleBinding = getControlBinding("toggle_bullets");
+        const bulletsAllowed = !toggleBinding || state.bulletToggleActive;
+        state.shotTimer -= dt;
+        if (state.mode === "playing" && bulletsAllowed && state.shotTimer <= 0) {
+          const customCooldown = spawnPlayerShots();
+          const fireRateBoost = rootActive ? 0.03 : macroActive ? 0.02 : 0;
+          const beautyFireRate = getBeautyFireRateModifier();
+          state.shotTimer = customCooldown ?? Math.max(0.04, (player.weaponBaseCooldown - player.evolutionLevel * 0.01 - fireRateBoost) / beautyFireRate);
+        }
+      }
+
+      function updateTimeControls(dt) {
+        const slowing = actionPressed("slow") || input.mobileSlow;
+        const speeding = actionPressed("fast") || input.mobileFast;
+
+        if (slowing && !speeding) state.manualScale = 0.1;
+        else if (speeding && !slowing) state.manualScale = 1.9;
+        else state.manualScale = 1;
+
+        if (state.beautySlowTimer > 0) {
+          state.manualScale = Math.min(state.manualScale, 0.12);
+        }
+
+        if (state.mode !== "playing") return;
+
+        if (slowing && !speeding) {
+          player.hasUsedSlow = true;
+          player.strain = Math.max(0, player.strain - 60 * dt);
+        } else if (speeding && !slowing) {
+          player.strain = Math.min(player.maxStrain, player.strain + 16 * dt);
+        } else if (player.hasUsedSlow) {
+          player.strain = Math.min(player.maxStrain, player.strain + 10 * dt);
+        }
+
+        if (state.currentBoss !== "architect") {
+          state.chronoScale = 1;
+          state.timeScale = clamp(state.manualScale, 0.15, 2.2);
+        }
+      }
+
+      function applyThreatResponse(dt, nearest, closeCount) {
+        player.nearMissCharge = clamp(player.nearMissCharge - dt * 14 + closeCount * dt * 2, 0, 100);
+        if (closeCount > 0) {
+          player.nearMissCharge = clamp(player.nearMissCharge + closeCount * dt * 4.2, 0, 100);
+        }
+        state.chronoScale = Number.isFinite(nearest) ? clamp(0.22 + nearest / 170, 0.2, 1) : 1;
+        state.timeScale = clamp(state.chronoScale * state.manualScale, 0.15, 2.2);
+      }
+
+      function updateBullets(dt) {
+        let nearest = Infinity;
+        let closeCount = 0;
+
+        for (let i = state.bullets.length - 1; i >= 0; i--) {
+          const bullet = state.bullets[i];
+          bullet.age += dt;
+
+          // Each shard travels outward, but the sinusoidal radial term makes the
+          // rings contract and expand like a flower opening on the beat.
+          const pulseDistance =
+            bullet.baseSpeed * bullet.age +
+            Math.sin(bullet.age * bullet.pulse * TAU + bullet.pulseOffset + state.elapsed * 0.8) * bullet.amplitude;
+
+          bullet.x = bullet.originX + Math.cos(bullet.angle) * pulseDistance + bullet.driftX * bullet.age;
+          bullet.y = bullet.originY + Math.sin(bullet.angle) * pulseDistance + bullet.driftY * bullet.age;
+
+          const dx = bullet.x - player.x;
+          const dy = bullet.y - player.y;
+          const distance = Math.hypot(dx, dy);
+          nearest = Math.min(nearest, distance);
+
+          if (distance < 110) {
+            closeCount++;
+            player.nearMissCharge = clamp(player.nearMissCharge + dt * 45, 0, 100);
+          }
+
+          if (distance < player.hitRadius + bullet.radius) {
+            state.bullets.splice(i, 1);
+            damagePlayer(1, "impact");
+            return;
+          }
+
+          const offscreen = bullet.x < -180 || bullet.x > width + 180 || bullet.y < -180 || bullet.y > height + 180;
+          if (offscreen || bullet.age > 9) {
+            state.bullets.splice(i, 1);
+          }
+        }
+
+        applyThreatResponse(dt, nearest, closeCount);
+      }
+
+      function updatePlayerShots(dt) {
+        const bossTarget = getBossTargetState();
+        const bossPos = bossTarget.pos;
+        const bossHitRadius = bossTarget.radius;
+        for (let i = state.playerShots.length - 1; i >= 0; i--) {
+          const shot = state.playerShots[i];
+          let tickTouching = false;
+          if (shot.type === "spark_targets") {
+            const toBossX = bossPos.x - shot.x;
+            const toBossY = bossPos.y - shot.y;
+            const distance = Math.hypot(toBossX, toBossY) || 1;
+            const desiredVx = (toBossX / distance) * 440;
+            const desiredVy = (toBossY / distance) * 440;
+            const steer = Math.min(1, dt * 4.8);
+            shot.vx += (desiredVx - shot.vx) * steer;
+            shot.vy += (desiredVy - shot.vy) * steer;
+            const speed = Math.hypot(shot.vx, shot.vy) || 1;
+            shot.vx = (shot.vx / speed) * 440;
+            shot.vy = (shot.vy / speed) * 440;
+            shot.rotation += shot.rotationSpeed * dt;
+          } else if (shot.type === "tick_phaser" || shot.type === "orbital_strike") {
+            shot.rotation = Math.atan2(shot.vy, shot.vx);
+          }
+
+          const applyTickPhaserContact = (sparkColor) => {
+            if (shot.type !== "tick_phaser") return false;
+            tickTouching = true;
+            if (!shot.hasInitialImpact) {
+              damageBoss(shot.initialDamage);
+              shot.hasInitialImpact = true;
+              shot.tickTimer = shot.tickInterval;
+              addSpark(shot.x, shot.y, sparkColor, 5, 100);
+            } else {
+              shot.tickTimer -= dt;
+              if (shot.tickTimer <= 0) {
+                damageBoss(shot.tickDamage);
+                shot.tickTimer = shot.tickInterval;
+                addSpark(shot.x, shot.y, sparkColor, 4, 84);
+              }
+            }
+            return true;
+          };
+          if (state.currentBoss === "cesium") {
+            const shotPull = getCesiumMagnetPullAt(shot.x, shot.y, shot.size + 2);
+            if (shotPull) {
+              shot.vx += shotPull.directionX * shotPull.pullAccel * dt * 0.82;
+              shot.vy += shotPull.directionY * shotPull.pullAccel * dt * 0.82;
+              const shotSpeed = Math.hypot(shot.vx, shot.vy);
+              const maxShotSpeed = 760;
+              if (shotSpeed > maxShotSpeed) {
+                const scale = maxShotSpeed / shotSpeed;
+                shot.vx *= scale;
+                shot.vy *= scale;
+              }
+            }
+          } else if (state.currentBoss === "tantalum") {
+            for (const panel of getTantalumPanelStates()) {
+              if (Math.abs(shot.x - panel.x) < panel.width * 0.6 + shot.size && Math.abs(shot.y - panel.y) < panel.height * 0.7 + shot.size) {
+                if (shot.phasesHazards) continue;
+                damageBoss(0.5);
+                addSpark(shot.x, shot.y, "rgba(146, 245, 255, 0.95)", 7, 115);
+                state.playerShots.splice(i, 1);
+                shot.life = 0;
+                break;
+              }
+            }
+            if (shot.life <= 0) continue;
+          } else if (state.currentBoss === "luminosity") {
+            let clippedBarrier = false;
+            for (const barrier of state.luminosity.barriers) {
+              if (Math.abs(shot.x - barrier.x) < barrier.width * 0.5 + shot.size && Math.abs(shot.y - barrier.y) < barrier.height * 0.5 + shot.size) {
+                if (shot.phasesHazards) continue;
+                addSpark(shot.x, shot.y, "rgba(255, 120, 120, 0.95)", 6, 110);
+                state.playerShots.splice(i, 1);
+                clippedBarrier = true;
+                break;
+              }
+            }
+            if (clippedBarrier) continue;
+          } else if (state.currentBoss === "sili") {
+            const siliUnits = getSiliUnitStates();
+            let hitSili = false;
+            for (const unit of [siliUnits.unitA, siliUnits.unitB]) {
+              const dist = Math.hypot(shot.x - unit.x, shot.y - unit.y);
+              if (dist < unit.size + shot.size + 2) {
+                const sparkColor = unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)";
+                if (shot.type === "tick_phaser") {
+                  applyTickPhaserContact(sparkColor);
+                } else {
+                  damageBoss(shot.damage);
+                  addSpark(shot.x, shot.y, sparkColor, 6, 120);
+                  state.playerShots.splice(i, 1);
+                }
+                hitSili = true;
+                break;
+              }
+            }
+            if (hitSili && shot.type !== "tick_phaser") continue;
+          } else if (state.currentBoss === "caesar") {
+            let hitCaesar = false;
+            for (const rail of getCaesarRailStates()) {
+              const railDist = Math.hypot(shot.x - rail.x, shot.y - rail.y);
+              if (railDist < rail.thickness + shot.size + 3) {
+                if (shot.phasesHazards) continue;
+                damageBoss(0.5);
+                addSpark(shot.x, shot.y, "rgba(214, 255, 224, 0.96)", 6, 120);
+                if (state.caesar.railCounterCooldowns[rail.index] <= 0) {
+                  spawnCaesarRailCounter(rail);
+                  state.caesar.railCounterCooldowns[rail.index] = 1;
+                }
+                state.playerShots.splice(i, 1);
+                hitCaesar = true;
+                break;
+              }
+            }
+            if (hitCaesar) continue;
+          } else if (state.currentBoss === "bleach") {
+            let hitBleach = false;
+            for (const nucleus of getBleachNucleiStates()) {
+              const nucleusDist = Math.hypot(shot.x - nucleus.x, shot.y - nucleus.y);
