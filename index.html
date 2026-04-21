@@ -2632,9 +2632,15 @@
         },
         tick_phaser: {
           name: "Tick Phaser",
-          desc: "Triangular phasing shots that hit slightly softer on contact, then keep ticking damage every 0.4 seconds while overlapping the boss.",
+          desc: "Triangular phasing shots that hit slightly softer on contact, then keep ticking damage every 0.1 seconds while overlapping the boss.",
           priceCents: 6899,
           type: "tick_phaser"
+        },
+        focus_beam: {
+          name: "Focus-Beam",
+          desc: "A sustained forward laser with real range. It hits hard in a tight lane, but it cannot reach across the entire arena.",
+          priceCents: 7499,
+          type: "focus_beam"
         }
       };
       const achievementDefs = {
@@ -6967,6 +6973,8 @@
           rotation: 0,
           rotationSpeed: 0,
           phasesHazards: false,
+          beamLength: 0,
+          beamWidth: 0,
           initialDamage: damage,
           tickDamage: damage,
           tickTimer: 0.1,
@@ -7074,8 +7082,8 @@
           rotation: Math.random() * TAU,
           targetX: player.x,
           targetY: player.y,
-          life: phaseTwo ? 3.7 : 3.5,
-          maxLife: phaseTwo ? 3.7 : 3.5,
+          life: phaseTwo ? 3.4 : 3,
+          maxLife: phaseTwo ? 3.4 : 3,
           speed: phaseTwo ? 130 : 145,
           health: phaseTwo ? 999 : 6.5,
           explosive: phaseTwo,
@@ -7090,7 +7098,7 @@
           y: -20,
           vy: phaseTwo ? 125 + Math.random() * 40 : 145 + Math.random() * 45,
           size: phaseTwo ? 14 + Math.random() * 4 : 7 + Math.random() * 2,
-          life: 6
+          life: 8.2
         });
       }
 
@@ -7222,7 +7230,7 @@
         }
         while (s.cursorTimer <= 0) {
           spawnSovereignCursor();
-          s.cursorTimer += phaseTwo ? 0.07 : 0.05;
+          s.cursorTimer += phaseTwo ? 0.078 : 0.06;
         }
 
         for (let i = s.beams.length - 1; i >= 0; i--) {
@@ -7289,7 +7297,7 @@
           nearest = Math.min(nearest, cursorDistance);
           if (cursorDistance < 110) closeCount++;
           if (cursorDistance < player.hitRadius + cursor.size * 0.65) {
-            damagePlayer(1, "impact");
+            damagePlayer(0.5, "impact");
           }
           if (cursor.life <= 0 || cursor.y > height + 50) s.cursors.splice(i, 1);
         }
@@ -7537,6 +7545,7 @@
           const reflection = n.reflections[i];
           reflection.x += reflection.vx * dt;
           reflection.y += reflection.vy * dt;
+          reflection.life -= dt;
           let bounced = false;
           if (bounceVelocityOffTriangleOrbit(reflection)) {
             addSpark(reflection.x, reflection.y, "rgba(255, 170, 90, 0.96)", 5, 92);
@@ -7553,13 +7562,21 @@
             reflection.vx *= 0.98;
             reflection.vy *= 0.98;
           }
+          const bossDistance = Math.hypot(reflection.x - n.x, reflection.y - n.y);
+          nearest = Math.min(nearest, bossDistance);
+          if (bossDistance < 58 + reflection.size) {
+            damageBoss((reflection.damage || 1) * 0.1, { source: "bullet" });
+            addSpark(reflection.x, reflection.y, "rgba(255, 188, 124, 0.92)", 6, 108);
+            n.reflections.splice(i, 1);
+            continue;
+          }
           const reflectionDistance = Math.hypot(player.x - reflection.x, player.y - reflection.y);
           nearest = Math.min(nearest, reflectionDistance);
           if (reflectionDistance < 110) closeCount++;
           if (reflectionDistance < player.hitRadius + reflection.size) {
             damagePlayer(1, "impact");
           }
-          if (reflection.x < -60 || reflection.x > width + 60 || reflection.y < -60 || reflection.y > height + 60) {
+          if (reflection.life <= 0 || reflection.x < -60 || reflection.x > width + 60 || reflection.y < -60 || reflection.y > height + 60) {
             n.reflections.splice(i, 1);
           }
         }
@@ -11356,6 +11373,20 @@
               rotation: angle,
               rotationSpeed: 0
             });
+          } else if (primaryMeta.type === "focus_beam") {
+            const sweepAngle = state.elapsed * (TAU / 5.8) + offset * 0.1;
+            createPlayerShot(player.x, player.y, sweepAngle, 395, 0.52, Math.max(4.4, baseSize * 1.08), shotDamage * 0.58, {
+              type: "focus_beam",
+              initialDamage: shotDamage * 0.58,
+              tickDamage: shotDamage * 0.34,
+              tickTimer: 0.08,
+              tickInterval: 0.08,
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: sweepAngle,
+              rotationSpeed: 0,
+              beamLength: 165,
+              beamWidth: Math.max(8.5, baseSize * 1.85)
+            });
           } else {
             createPlayerShot(muzzleX, muzzleY, angle, 620, shotLife, baseSize, shotDamage, {
               immuneEnvironmental: bruteforceActive || macroActive || rootActive
@@ -11363,7 +11394,7 @@
           }
         }
         addSpark(muzzleX, muzzleY, "rgba(255, 215, 106, 0.95)", 6 + level, 100);
-        return null;
+        return primaryMeta.type === "focus_beam" ? 0.12 : null;
       }
 
       function getSlabhraidhSlickControl() {
@@ -11534,6 +11565,29 @@
         for (let i = state.playerShots.length - 1; i >= 0; i--) {
           const shot = state.playerShots[i];
           let tickTouching = false;
+          const getShotSegment = () => {
+            if (shot.type !== "focus_beam") {
+              return {
+                ax: shot.x,
+                ay: shot.y,
+                bx: shot.x,
+                by: shot.y
+              };
+            }
+            const angle = Math.atan2(shot.vy, shot.vx);
+            const tipX = shot.x + Math.cos(angle) * shot.beamLength;
+            const tipY = shot.y + Math.sin(angle) * shot.beamLength;
+            return {
+              ax: shot.x,
+              ay: shot.y,
+              bx: tipX,
+              by: tipY
+            };
+          };
+          const getShotDistanceToPoint = (px, py) => {
+            const segment = getShotSegment();
+            return distanceToSegment(px, py, segment.ax, segment.ay, segment.bx, segment.by);
+          };
           if (shot.type === "spark_targets") {
             const toBossX = bossPos.x - shot.x;
             const toBossY = bossPos.y - shot.y;
@@ -11547,12 +11601,12 @@
             shot.vx = (shot.vx / speed) * 440;
             shot.vy = (shot.vy / speed) * 440;
             shot.rotation += shot.rotationSpeed * dt;
-          } else if (shot.type === "tick_phaser" || shot.type === "orbital_strike") {
+          } else if (shot.type === "tick_phaser" || shot.type === "orbital_strike" || shot.type === "focus_beam") {
             shot.rotation = Math.atan2(shot.vy, shot.vx);
           }
 
           const applyTickPhaserContact = (sparkColor) => {
-            if (shot.type !== "tick_phaser") return false;
+            if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") return false;
             tickTouching = true;
             if (!shot.hasInitialImpact) {
               damageBoss(shot.initialDamage, { source: "bullet" });
@@ -11610,10 +11664,10 @@
             const siliUnits = getSiliUnitStates();
             let hitSili = false;
             for (const unit of [siliUnits.unitA, siliUnits.unitB]) {
-              const dist = Math.hypot(shot.x - unit.x, shot.y - unit.y);
+              const dist = shot.type === "focus_beam" ? getShotDistanceToPoint(unit.x, unit.y) : Math.hypot(shot.x - unit.x, shot.y - unit.y);
               if (dist < unit.size + shot.size + 2) {
                 const sparkColor = unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)";
-                if (shot.type === "tick_phaser") {
+                if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                   applyTickPhaserContact(sparkColor);
                 } else {
                   damageBoss(shot.damage, { source: "bullet" });
@@ -11624,11 +11678,11 @@
                 break;
               }
             }
-            if (hitSili && shot.type !== "tick_phaser") continue;
+            if (hitSili && shot.type !== "tick_phaser" && shot.type !== "focus_beam") continue;
           } else if (state.currentBoss === "caesar") {
             let hitCaesar = false;
             for (const rail of getCaesarRailStates()) {
-              const railDist = Math.hypot(shot.x - rail.x, shot.y - rail.y);
+              const railDist = shot.type === "focus_beam" ? getShotDistanceToPoint(rail.x, rail.y) : Math.hypot(shot.x - rail.x, shot.y - rail.y);
               if (railDist < rail.thickness + shot.size + 3) {
                 if (shot.phasesHazards) continue;
                 damageBoss(0.5, { source: "bullet" });
@@ -11646,15 +11700,15 @@
           } else if (state.currentBoss === "bleach") {
             let hitBleach = false;
             for (const nucleus of getBleachNucleiStates()) {
-              const nucleusDist = Math.hypot(shot.x - nucleus.x, shot.y - nucleus.y);
+              const nucleusDist = shot.type === "focus_beam" ? getShotDistanceToPoint(nucleus.x, nucleus.y) : Math.hypot(shot.x - nucleus.x, shot.y - nucleus.y);
               if (nucleusDist < nucleus.radius + shot.size + 2) {
-                if (shot.type === "tick_phaser") {
+                if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                   applyTickPhaserContact("rgba(238, 255, 224, 0.96)");
                 } else {
                   damageBoss(shot.damage, { source: "bullet" });
                   addSpark(shot.x, shot.y, "rgba(238, 255, 224, 0.96)", 6, 120);
                 }
-                if (state.bleach.phase === 3 && shot.type !== "tick_phaser") {
+                if (state.bleach.phase === 3 && shot.type !== "tick_phaser" && shot.type !== "focus_beam") {
                   const pushDx = nucleus.x - player.x;
                   const pushDy = nucleus.y - player.y;
                   const pushDist = Math.hypot(pushDx, pushDy) || 1;
@@ -11662,16 +11716,16 @@
                   state.bleach.vy += (pushDy / pushDist) * 24;
                   addFlash(nucleus.x, nucleus.y, "rgba(238,255,210,0.16)", 46);
                 }
-                if (shot.type !== "tick_phaser") state.playerShots.splice(i, 1);
+                if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") state.playerShots.splice(i, 1);
                 hitBleach = true;
                 break;
               }
             }
-            if (hitBleach && shot.type !== "tick_phaser") continue;
+            if (hitBleach && shot.type !== "tick_phaser" && shot.type !== "focus_beam") continue;
           } else if (state.currentBoss === "slabhraidh") {
             let hitSlabhraidh = false;
             for (const bar of getSlabhraidhBarStates()) {
-              if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2)) {
+              if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(bar.x, bar.y) < bar.thickness * 0.6 + shot.size + 2)) {
                 if (shot.phasesHazards) continue;
                 damageBoss(0.5, { source: "bullet" });
                 addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
@@ -11682,7 +11736,7 @@
             }
             if (!hitSlabhraidh) {
               for (const det of state.slabhraidh.phase4DetachedBars) {
-                if (slabhraidhPointOnBar(det, shot.x, shot.y, shot.size + 2)) {
+                if (slabhraidhPointOnBar(det, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(det.x, det.y) < det.thickness * 0.6 + shot.size + 2)) {
                   if (shot.phasesHazards) continue;
                   damageBoss(0.5, { source: "bullet" });
                   addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
@@ -11692,15 +11746,15 @@
                 }
               }
             }
-            if (!hitSlabhraidh && state.slabhraidh.detachedBar && slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2)) {
+            if (!hitSlabhraidh && state.slabhraidh.detachedBar && (slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(state.slabhraidh.detachedBar.x, state.slabhraidh.detachedBar.y) < state.slabhraidh.detachedBar.thickness * 0.6 + shot.size + 2))) {
               if (shot.phasesHazards) continue;
               damageBoss(0.5, { source: "bullet" });
               addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
               state.playerShots.splice(i, 1);
               hitSlabhraidh = true;
             }
-            if (!hitSlabhraidh && Math.hypot(shot.x - state.slabhraidh.x, shot.y - state.slabhraidh.y) < getSlabhraidhCoreRadius() + shot.size + 2) {
-              if (shot.type === "tick_phaser") {
+            if (!hitSlabhraidh && (shot.type === "focus_beam" ? getShotDistanceToPoint(state.slabhraidh.x, state.slabhraidh.y) : Math.hypot(shot.x - state.slabhraidh.x, shot.y - state.slabhraidh.y)) < getSlabhraidhCoreRadius() + shot.size + 2) {
+              if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                 applyTickPhaserContact("rgba(255, 210, 150, 0.96)");
               } else {
                 damageBoss(shot.damage, { source: "bullet" });
@@ -11709,12 +11763,8 @@
               }
               hitSlabhraidh = true;
             }
-            if (hitSlabhraidh && shot.type !== "tick_phaser") continue;
+            if (hitSlabhraidh && shot.type !== "tick_phaser" && shot.type !== "focus_beam") continue;
           }
-          shot.x += shot.vx * dt;
-          shot.y += shot.vy * dt;
-          shot.life -= dt;
-
           if (state.currentBoss === "sovereign" && state.bossPhase === 1) {
             let shotRemoved = false;
             for (let starIndex = state.sovereign.stars.length - 1; starIndex >= 0; starIndex--) {
@@ -11769,7 +11819,9 @@
                 y: shot.y,
                 vx: shot.vx * 0.8,
                 vy: shot.vy * 0.8,
-                size: 6
+                size: 6,
+                damage: shot.damage,
+                life: 10
               });
               addSpark(shot.x, shot.y, "rgba(255, 170, 90, 0.96)", 8, 120);
               state.playerShots.splice(i, 1);
@@ -11782,7 +11834,9 @@
                   y: shot.y,
                   vx: shot.vx * 0.8,
                   vy: shot.vy * 0.8,
-                  size: 6
+                  size: 6,
+                  damage: shot.damage,
+                  life: 10
                 });
                 addSpark(shot.x, shot.y, "rgba(255, 170, 90, 0.96)", 8, 120);
                 state.playerShots.splice(i, 1);
@@ -11812,46 +11866,52 @@
             }
             if (hitAlarmBlade) continue;
             const coreHitRadius = getAlarmistCoreRadius() + shot.size;
-            const coreDist = distanceToSegment(state.alarmist.x, state.alarmist.y, prevShotX, prevShotY, shot.x, shot.y);
+            const segment = shot.type === "focus_beam"
+              ? getShotSegment()
+              : { ax: prevShotX, ay: prevShotY, bx: shot.x, by: shot.y };
+            const coreDist = distanceToSegment(state.alarmist.x, state.alarmist.y, segment.ax, segment.ay, segment.bx, segment.by);
             if (coreDist < coreHitRadius) {
-              if (shot.type === "tick_phaser") {
+              if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                 applyTickPhaserContact("rgba(255, 220, 184, 0.9)");
               } else {
                 damageBoss(shot.damage, { source: "bullet" });
               }
-              if (shot.type !== "tick_phaser" && state.alarmist.hitFxCooldown <= 0) {
+              if (shot.type !== "tick_phaser" && shot.type !== "focus_beam" && state.alarmist.hitFxCooldown <= 0) {
                 addSpark(shot.x, shot.y, "rgba(255, 220, 184, 0.9)", 4, 96);
                 state.alarmist.hitFxCooldown = 0.05;
               }
-              if (shot.type !== "tick_phaser") state.playerShots.splice(i, 1);
-              if (shot.type !== "tick_phaser") continue;
+              if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") state.playerShots.splice(i, 1);
+              if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") continue;
             }
           }
 
           const dx = shot.x - bossPos.x;
           const dy = shot.y - bossPos.y;
           const allowCentralHit = (state.currentBoss !== "sili" || state.sili.phase === 4) && (state.currentBoss !== "caesar" || !state.caesar.prismInvuln) && state.currentBoss !== "bleach" && state.currentBoss !== "alarmist";
-          if (allowCentralHit && dx * dx + dy * dy < bossHitRadius * bossHitRadius) {
+          const genericHit = shot.type === "focus_beam"
+            ? getShotDistanceToPoint(bossPos.x, bossPos.y) < bossHitRadius + (shot.beamWidth || shot.size)
+            : dx * dx + dy * dy < bossHitRadius * bossHitRadius;
+          if (allowCentralHit && genericHit) {
             if (state.currentBoss === "tantalum" && state.tantalum.flashTimer > 0 && state.tantalum.absorbShotsRemaining > 0) {
               state.tantalum.absorbShotsRemaining -= 1;
               state.tantalum.flashTimer = 0;
               triggerTantalumRetaliation(player.x, player.y);
               addFlash(shot.x, shot.y, "rgba(196, 252, 255, 0.55)", 44);
             } else {
-              if (shot.type === "tick_phaser") {
+              if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                 applyTickPhaserContact("rgba(255, 215, 106, 0.95)");
               } else {
                 damageBoss(shot.damage, { source: "bullet" });
               }
             }
-            if (shot.type !== "tick_phaser") {
+            if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") {
               addSpark(shot.x, shot.y, "rgba(255, 215, 106, 0.95)", 4, 90);
               state.playerShots.splice(i, 1);
               continue;
             }
           }
 
-          if (shot.type === "tick_phaser" && !tickTouching) {
+          if ((shot.type === "tick_phaser" || shot.type === "focus_beam") && !tickTouching) {
             shot.hasInitialImpact = false;
             shot.tickTimer = shot.tickInterval;
           }
@@ -13436,10 +13496,14 @@
           ctx.rotate(star.rotation);
           ctx.fillStyle = "rgba(255, 220, 90, 0.95)";
           ctx.beginPath();
-          ctx.moveTo(0, -12);
-          ctx.lineTo(12, 0);
-          ctx.lineTo(0, 12);
-          ctx.lineTo(-12, 0);
+          for (let point = 0; point < 10; point++) {
+            const angle = -Math.PI * 0.5 + point * (Math.PI / 5);
+            const radius = point % 2 === 0 ? 13 : 5.4;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            if (point === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
           ctx.closePath();
           ctx.fill();
           ctx.strokeStyle = "rgba(255, 255, 210, 0.55)";
@@ -14804,6 +14868,45 @@
             ctx.lineTo(shot.size * 1.38, shot.size * 1.6);
             ctx.lineTo(-shot.size * 1.38, shot.size * 1.6);
             ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          } else if (shot.type === "focus_beam") {
+            const angle = Math.atan2(shot.vy, shot.vx);
+            const beamLength = shot.beamLength || 210;
+            const beamWidth = shot.beamWidth || Math.max(9, shot.size * 2.2);
+            const tipX = shot.x + Math.cos(angle) * beamLength;
+            const tipY = shot.y + Math.sin(angle) * beamLength;
+            ctx.save();
+            ctx.translate(shot.x, shot.y);
+            ctx.rotate(angle);
+            const bodyGradient = ctx.createLinearGradient(0, 0, beamLength, 0);
+            bodyGradient.addColorStop(0, hexToRgba(mixHexColors(bulletColor, "#ffffff", 0.1), alpha * 0.22));
+            bodyGradient.addColorStop(0.25, hexToRgba(mixHexColors(bulletColor, "#ffffff", 0.22), alpha * 0.68));
+            bodyGradient.addColorStop(0.82, hexToRgba(mixHexColors(bulletColor, "#ffffff", 0.08), alpha * 0.84));
+            bodyGradient.addColorStop(1, hexToRgba("#ffffff", alpha));
+            ctx.fillStyle = bodyGradient;
+            ctx.beginPath();
+            ctx.moveTo(beamLength + beamWidth * 0.95, 0);
+            ctx.lineTo(beamLength - beamWidth * 0.3, beamWidth * 0.72);
+            ctx.lineTo(0, beamWidth * 0.38);
+            ctx.lineTo(0, -beamWidth * 0.38);
+            ctx.lineTo(beamLength - beamWidth * 0.3, -beamWidth * 0.72);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = hexToRgba("#ffffff", alpha * 0.92);
+            ctx.fillRect(0, -Math.max(1.2, beamWidth * 0.12), beamLength, Math.max(2.4, beamWidth * 0.24));
+
+            ctx.fillStyle = hexToRgba(mixHexColors(bulletColor, "#ffffff", 0.32), alpha * 0.55);
+            ctx.fillRect(0, -beamWidth * 0.56, beamLength * 0.28, beamWidth * 1.12);
+
+            const glow = ctx.createRadialGradient(beamLength, 0, 0, beamLength, 0, beamWidth * 2.8);
+            glow.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            glow.addColorStop(0.42, hexToRgba(mixHexColors(bulletColor, "#ffffff", 0.28), alpha * 0.58));
+            glow.addColorStop(1, hexToRgba(bulletColor, 0));
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(beamLength, 0, beamWidth * 2.8, 0, TAU);
             ctx.fill();
             ctx.restore();
           } else {
