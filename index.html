@@ -1057,6 +1057,44 @@
       letter-spacing: 0.08em;
     }
 
+    .shop-purchase-burst {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 215, 106, 0.34);
+      background:
+        linear-gradient(135deg, rgba(255, 215, 106, 0.16), rgba(255, 140, 76, 0.14)),
+        rgba(255, 255, 255, 0.03);
+      color: #fff2c8;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      box-shadow: 0 0 28px rgba(255, 188, 94, 0.2);
+      animation: shopPurchaseBurst 540ms cubic-bezier(0.18, 0.8, 0.24, 1);
+      transform-origin: center top;
+    }
+
+    .shop-purchase-burst strong {
+      color: #ffffff;
+    }
+
+    @keyframes shopPurchaseBurst {
+      0% {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.94);
+        box-shadow: 0 0 0 rgba(255, 188, 94, 0);
+      }
+      55% {
+        opacity: 1;
+        transform: translateY(0) scale(1.04);
+        box-shadow: 0 0 34px rgba(255, 188, 94, 0.32);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 22px rgba(255, 188, 94, 0.2);
+      }
+    }
+
     .operations-station {
       position: relative;
       min-height: 220px;
@@ -3017,6 +3055,8 @@
         loadingFailedAssets: 0,
         operationsFeedback: "",
         operationsFeedbackTone: "neutral",
+        shopPurchaseFxTimer: 0,
+        shopPurchaseFxLabel: "",
         operationsTimerSecond: null,
         pausePhasePanelOpen: false,
         achievementsTab: "main",
@@ -3230,10 +3270,13 @@
           hopperTimer: 0,
           seekerTimer: 0,
           refractTimer: 0,
+          beamWarnTimer: 0,
+          beamReleaseTimer: 0,
           beamPattern: 0,
           cursorTimer: 0,
           squareRainTimer: 0,
           loopTimer: 0,
+          shockwaveTimer: 0,
           loopFlash: 0,
           spiralTimer: 0,
           spiralAngle: 0,
@@ -3242,6 +3285,7 @@
           novaRadius: 0,
           novaActive: 0,
           novaHit: false,
+          shockwaves: [],
           projectiles: [],
           debris: [],
           fragments: []
@@ -3410,6 +3454,7 @@
       let achievementSound = null;
       let alarmistPingSound = null;
       let hBombSound = null;
+      let purchaseSound = null;
       let shockwaveSounds = [];
       let temporalStrainDeadSound = null;
       let deathSounds = [];
@@ -3497,6 +3542,11 @@
           hBombSound.loop = false;
           hBombSound.preload = "auto";
         }
+        if (!purchaseSound) {
+          purchaseSound = new Audio("Purchase.m4a");
+          purchaseSound.loop = false;
+          purchaseSound.preload = "auto";
+        }
         if (!temporalStrainDeadSound) {
           temporalStrainDeadSound = new Audio("TemporalStrainDEAD.m4a");
           temporalStrainDeadSound.loop = false;
@@ -3527,6 +3577,7 @@
         achievementSound.volume = state.settings.volume;
         alarmistPingSound.volume = state.settings.volume;
         hBombSound.volume = state.settings.volume;
+        purchaseSound.volume = state.settings.volume;
         temporalStrainDeadSound.volume = state.settings.volume;
         for (const deathSound of deathSounds) {
           deathSound.volume = state.settings.volume;
@@ -3614,6 +3665,7 @@
         trackAudioLoad("Achievement Cue", achievementSound);
         trackAudioLoad("Alarmist Ping", alarmistPingSound);
         trackAudioLoad("H-Bomb", hBombSound);
+        trackAudioLoad("Purchase", purchaseSound);
         trackAudioLoad("Temporal Strain Dead", temporalStrainDeadSound);
         deathSounds.forEach((audio, index) => trackAudioLoad(`Death ${index + 1}`, audio));
         shockwaveSounds.forEach((audio, index) => trackAudioLoad(`Shockwave ${index + 1}`, audio));
@@ -3752,6 +3804,7 @@
         if (boss3Music && state.mode !== "gameover") boss3Music.volume = getBossMusicVolume();
         if (achievementSound) achievementSound.volume = state.settings.volume;
         if (hBombSound) hBombSound.volume = state.settings.volume;
+        if (purchaseSound) purchaseSound.volume = state.settings.volume;
       }
 
       function playHoverCue() {
@@ -3830,6 +3883,26 @@
           hBombSound.volume = state.settings.volume;
           hBombSound.play().catch(() => {});
         } catch {}
+      }
+
+      function playPurchaseSound() {
+        ensureAudio();
+        ensureMusicPlayers();
+        if (!purchaseSound) return;
+        try {
+          purchaseSound.pause();
+          purchaseSound.currentTime = 0;
+          purchaseSound.volume = state.settings.volume;
+          purchaseSound.play().catch(() => {});
+        } catch {}
+      }
+
+      function triggerShopPurchaseFeedback(label) {
+        state.shopPurchaseFxLabel = label;
+        state.shopPurchaseFxTimer = 0.72;
+        state.operationsFeedback = `${label} purchased and equipped.`;
+        state.operationsFeedbackTone = "positive";
+        playPurchaseSound();
       }
 
       function playShockwaveSound() {
@@ -4331,6 +4404,7 @@
         }
         state.profile.shop.ownedUltimates[loadout] = true;
         state.profile.attackLoadout = loadout;
+        triggerShopPurchaseFeedback(meta.name);
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -4351,6 +4425,7 @@
         }
         state.profile.shop.ownedXlBullets[id] = true;
         state.profile.shop.selectedXlBullet = id;
+        triggerShopPurchaseFeedback(meta.name);
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -4371,6 +4446,7 @@
         }
         state.profile.shop.ownedPrimaryBullets[id] = true;
         state.profile.shop.selectedPrimaryBullet = id;
+        triggerShopPurchaseFeedback(meta.name);
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -4385,6 +4461,7 @@
           return;
         }
         state.profile.shop.maxEvolutionTier = tier;
+        triggerShopPurchaseFeedback(`Evolution ${roman[tier - 1]}`);
         awardAchievement("arsenal_tuned");
         saveProfile();
       }
@@ -5525,6 +5602,9 @@
         const ownedUltimates = getOwnedUltimates();
         const ownedXlBullets = getOwnedXlBullets();
         const ownedPrimaryBullets = getOwnedPrimaryBullets();
+        const purchaseFxMarkup = state.shopPurchaseFxTimer > 0
+          ? `<div class="shop-purchase-burst"><strong>Purchased</strong> ${state.shopPurchaseFxLabel}</div>`
+          : "";
         const ultimateMarkup = Object.entries(attackLoadoutDefs).map(([id, meta]) => {
           const owned = Boolean(ownedUltimates[id]);
           const selectedClass = selected === id ? "active" : "";
@@ -5618,6 +5698,7 @@
             <div>
               <h1 class="menu-title" style="font-size: clamp(30px, 6vw, 70px);">Shop</h1>
               <div class="menu-subtitle">Purchase premium bullet types, ultimates, XL attacks, and raise your plane evolution ceiling</div>
+              ${purchaseFxMarkup}
             </div>
             <div class="config-grid">
               <section class="config-card">
@@ -5928,10 +6009,13 @@
           hopperTimer: 0.9,
           seekerTimer: 1.8,
           refractTimer: 2.2,
+          beamWarnTimer: 0,
+          beamReleaseTimer: 0,
           beamPattern: 0,
           cursorTimer: 1.2,
           squareRainTimer: 0.55,
           loopTimer: 6,
+          shockwaveTimer: 2.2,
           loopFlash: 0,
           spiralTimer: 0.08,
           spiralAngle: 0,
@@ -5940,6 +6024,7 @@
           novaRadius: 0,
           novaActive: 0,
           novaHit: false,
+          shockwaves: [],
           projectiles: [],
           debris: [],
           fragments: []
@@ -9894,29 +9979,38 @@
       function spawnBeautyLightBeams() {
         const b = state.beauty;
         const colors = ["rgba(255, 146, 210, 0.9)", "rgba(110, 214, 255, 0.9)", "rgba(255, 220, 120, 0.9)", "rgba(170, 255, 196, 0.88)"];
-        const offsets = [0, Math.PI / 16, Math.PI / 8, Math.PI * 3 / 16, Math.PI / 6, Math.PI * 5 / 24];
-        const patternOffset = offsets[b.beamPattern % offsets.length];
+        const patterns = [
+          { base: 0, wave: 0.06, skew: [0, 0, 0, 0, 0, 0, 0, 0] },
+          { base: Math.PI / 16, wave: 0.08, skew: [0, 0.02, -0.02, 0.035, -0.035, 0.02, -0.02, 0] },
+          { base: Math.PI / 11, wave: 0.05, skew: [0.015, -0.03, 0.045, -0.015, 0.03, -0.045, 0.02, -0.02] },
+          { base: Math.PI * 3 / 20, wave: 0.09, skew: [0, 0.045, 0, -0.045, 0, 0.045, 0, -0.045] },
+          { base: Math.PI / 7, wave: 0.07, skew: [0.03, -0.015, -0.03, 0.015, 0.03, -0.015, -0.03, 0.015] }
+        ];
+        const pattern = patterns[b.beamPattern % patterns.length];
         b.beamPattern += 1;
-        for (let i = 0; i < 8; i++) {
-          const angle = (i / 8) * TAU + patternOffset + Math.sin(b.fold * 0.3 + i * 0.6) * 0.08;
+        for (let i = 0; i < 16; i++) {
+          const angle = (i / 16) * TAU + pattern.base + pattern.skew[i % pattern.skew.length] + Math.sin(b.fold * 0.3 + b.beamPattern * 0.42 + i * 0.72) * pattern.wave;
           b.projectiles.push({
             type: "beam",
             x: b.x,
             y: b.y,
             angle,
-            width: 18,
+            width: 15,
             progress: 0,
-            speed: 860,
-            maxDistance: Math.max(width, height) * 0.7,
+            speed: 760,
+            maxDistance: Math.max(width, height) * 1.24,
             refracted: false,
             color: colors[i % colors.length],
-            life: 1.25
+            life: 2
           });
         }
       }
 
       function spawnBeautyStairCursor(fromLeft = false, y = null, speedScale = 1) {
         const b = state.beauty;
+        const targetX = fromLeft
+          ? width - 24
+          : 24;
         b.projectiles.push({
           type: "stair_cursor",
           x: fromLeft ? -28 : width + 28,
@@ -9925,8 +10019,12 @@
           vy: 0,
           zigzag: Math.random() > 0.5 ? 1 : -1,
           stepTimer: 0.12,
+          descending: false,
+          targetX,
+          fallSpeed: 58 + Math.random() * 24,
+          descendSpeed: 210 + Math.random() * 48,
           size: 16,
-          life: 7.2,
+          life: 8.4,
           color: "rgba(110, 214, 255, 0.92)"
         });
       }
@@ -10074,8 +10172,28 @@
         b.fold += dt * (b.phase === 4 ? 1.4 : 0.85);
         b.glow += dt * 2.2;
         b.loopFlash = Math.max(0, b.loopFlash - dt * 1.6);
+        b.beamWarnTimer = Math.max(0, b.beamWarnTimer - dt);
         b.x = centerX + Math.sin(state.elapsed * 0.34 + b.phase * 0.5) * (b.phase === 4 ? 116 : 76) + Math.cos(state.elapsed * 0.18 + b.phase) * 28;
         b.y = height * (b.phase === 4 ? 0.18 : 0.17) + Math.cos(state.elapsed * 0.42 + b.phase) * (b.phase === 4 ? 30 : 22);
+        if (b.beamReleaseTimer > 0) {
+          b.beamReleaseTimer -= dt;
+          if (b.beamReleaseTimer <= 0) {
+            spawnBeautyLightBeams();
+            addFlash(b.x, b.y, "rgba(255, 255, 255, 0.48)", 200);
+            addFlash(b.x, b.y, "rgba(255, 178, 220, 0.24)", 260);
+            state.shake = Math.max(state.shake, 16);
+            for (let i = 0; i < 8; i++) {
+              const burstAngle = (i / 8) * TAU + b.beamPattern * 0.08;
+              addSpark(
+                b.x + Math.cos(burstAngle) * 24,
+                b.y + Math.sin(burstAngle) * 24,
+                i % 2 === 0 ? "rgba(255, 220, 240, 0.96)" : "rgba(170, 236, 255, 0.96)",
+                8,
+                160
+              );
+            }
+          }
+        }
 
         let nearest = Infinity;
         let closeCount = 0;
@@ -10103,14 +10221,15 @@
           b.refractTimer -= dt;
           b.cursorTimer -= dt;
           b.squareRainTimer -= dt;
-          if (b.refractTimer <= 0) {
-            b.refractTimer = 2 + Math.random() * 3;
-            spawnBeautyLightBeams();
-            addFlash(b.x, b.y, "rgba(255, 255, 255, 0.24)", 150);
+          if (b.refractTimer <= 0 && b.beamReleaseTimer <= 0) {
+            b.refractTimer = 1 + Math.random() * 4;
+            b.beamWarnTimer = 0.7;
+            b.beamReleaseTimer = 0.7;
+            addFlash(b.x, b.y, "rgba(255, 255, 255, 0.18)", 170);
           }
           if (b.cursorTimer <= 0) {
-            b.cursorTimer = 0.26;
-            for (let lane = 0; lane < 3; lane++) {
+            b.cursorTimer = 0.34;
+            for (let lane = 0; lane < 2; lane++) {
               const laneY = 90 + ((lane + (b.beamPattern % 2) * 0.5) / 3.5) * Math.max(140, height - 180);
               spawnBeautyStairCursor(false, laneY, 1.05 + lane * 0.08);
               spawnBeautyStairCursor(true, laneY + 26, 1 + lane * 0.07);
@@ -10122,6 +10241,7 @@
           }
         } else if (b.phase === 3) {
           b.loopTimer -= dt;
+          b.shockwaveTimer -= dt;
           b.spiralTimer -= dt;
           b.spiralAngle += dt * 1.9;
           if (b.loopTimer <= 0) {
@@ -10134,6 +10254,17 @@
           if (b.spiralTimer <= 0) {
             b.spiralTimer = 0.055;
             spawnBeautySpiralBullet();
+          }
+          if (b.shockwaveTimer <= 0) {
+            b.shockwaveTimer = 1.5 + Math.random() * 2;
+            b.shockwaves.push({
+              radius: coreRadius * 0.78,
+              speed: 420,
+              width: 18,
+              life: 1.9,
+              hit: false
+            });
+            addFlash(b.x, b.y, "rgba(255, 238, 248, 0.16)", 148);
           }
         } else {
           b.rainTimer -= dt;
@@ -10225,17 +10356,19 @@
             if (Math.abs(player.x - projectile.x) < projectile.size * 0.7 + player.hitRadius && Math.abs(player.y - projectile.y) < projectile.size * 0.7 + player.hitRadius) damagePlayer(0.5, "impact");
           } else if (projectile.type === "beam") {
             projectile.progress += projectile.speed * dt;
-            const endX = projectile.x + Math.cos(projectile.angle) * projectile.progress;
-            const endY = projectile.y + Math.sin(projectile.angle) * projectile.progress;
-            const beamDist = distanceToSegment(player.x, player.y, projectile.x, projectile.y, endX, endY);
+            const startX = projectile.refracted ? projectile.x : b.x;
+            const startY = projectile.refracted ? projectile.y : b.y;
+            const endX = startX + Math.cos(projectile.angle) * projectile.progress;
+            const endY = startY + Math.sin(projectile.angle) * projectile.progress;
+            const beamDist = distanceToSegment(player.x, player.y, startX, startY, endX, endY);
             nearest = Math.min(nearest, beamDist);
             if (beamDist < player.hitRadius + projectile.width * 0.45) damagePlayer(projectile.refracted ? 0.5 : 1, "impact");
             if (!projectile.refracted && projectile.progress >= projectile.maxDistance) {
-              const edgeX = projectile.x + Math.cos(projectile.angle) * projectile.maxDistance;
-              const edgeY = projectile.y + Math.sin(projectile.angle) * projectile.maxDistance;
+              const edgeX = startX + Math.cos(projectile.angle) * projectile.maxDistance;
+              const edgeY = startY + Math.sin(projectile.angle) * projectile.maxDistance;
               const centerAngle = Math.atan2(b.y - edgeY, b.x - edgeX);
               for (const spread of [-0.22, 0, 0.22]) {
-                b.projectiles.push({
+              b.projectiles.push({
                   type: "beam",
                   x: edgeX,
                   y: edgeY,
@@ -10246,20 +10379,37 @@
                   maxDistance: Math.max(width, height) * 0.65,
                   refracted: true,
                   color: projectile.color,
-                  life: 1.2
+                  life: 1.55
                 });
               }
               projectile.life = 0;
             }
           } else if (projectile.type === "stair_cursor") {
-            projectile.stepTimer -= dt;
-            if (projectile.stepTimer <= 0) {
-              projectile.stepTimer = 0.11;
-              projectile.vy = projectile.zigzag * 180;
-              projectile.zigzag *= -1;
+            if (!projectile.descending) {
+              projectile.stepTimer -= dt;
+              if (projectile.stepTimer <= 0) {
+                projectile.stepTimer = 0.11;
+                projectile.vy = projectile.zigzag * 180;
+                projectile.zigzag *= -1;
+              }
+              projectile.x += projectile.vx * dt;
+              projectile.y += (projectile.vy + projectile.fallSpeed) * dt;
+              if ((projectile.vx > 0 && projectile.x >= projectile.targetX) || (projectile.vx < 0 && projectile.x <= projectile.targetX)) {
+                projectile.descending = true;
+                projectile.vx *= 0.18;
+                projectile.vy = projectile.descendSpeed;
+              }
+            } else {
+              projectile.stepTimer -= dt;
+              if (projectile.stepTimer <= 0) {
+                projectile.stepTimer = 0.15;
+                projectile.vx = projectile.zigzag * (56 + Math.random() * 26);
+                projectile.zigzag *= -1;
+              }
+              projectile.x += projectile.vx * dt;
+              projectile.y += (projectile.vy + projectile.fallSpeed * 1.35) * dt;
+              projectile.vx *= Math.max(0, 1 - dt * 5.6);
             }
-            projectile.x += projectile.vx * dt;
-            projectile.y += projectile.vy * dt;
             const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
             nearest = Math.min(nearest, dist);
             if (dist < player.hitRadius + projectile.size) damagePlayer(0.5, "impact");
@@ -10317,6 +10467,26 @@
           nearest = Math.min(nearest, dist);
           if (dist < player.hitRadius + debris.size * 0.65) damagePlayer(0.5, "impact");
           if (debris.life <= 0 || debris.y > height + 60) b.debris.splice(i, 1);
+        }
+
+        for (let i = b.shockwaves.length - 1; i >= 0; i--) {
+          const shockwave = b.shockwaves[i];
+          shockwave.radius += shockwave.speed * dt;
+          shockwave.life -= dt;
+          const dist = Math.hypot(player.x - b.x, player.y - b.y);
+          nearest = Math.min(nearest, Math.abs(dist - shockwave.radius));
+          if (!shockwave.hit && Math.abs(dist - shockwave.radius) < shockwave.width + player.hitRadius) {
+            shockwave.hit = true;
+            playShockwaveSound();
+            const knockAngle = Math.random() * TAU;
+            player.pullVx += Math.cos(knockAngle) * 320;
+            player.pullVy += Math.sin(knockAngle) * 320;
+            state.shake = Math.max(state.shake, 22);
+            addFlash(player.x, player.y, "rgba(255, 234, 246, 0.24)", 116);
+          }
+          if (shockwave.life <= 0 || shockwave.radius > Math.max(width, height) * 1.2) {
+            b.shockwaves.splice(i, 1);
+          }
         }
 
         applyThreatResponse(dt, nearest, closeCount);
@@ -12037,6 +12207,15 @@
         }
 
         if (["menu", "operations", "save_files", "boss_select", "config", "achievements", "edit_attacks", "severed"].includes(state.mode)) {
+          const previousShopPurchaseFx = state.shopPurchaseFxTimer;
+          state.shopPurchaseFxTimer = Math.max(0, state.shopPurchaseFxTimer - dt);
+          if (state.shopPurchaseFxTimer <= 0) {
+            state.shopPurchaseFxLabel = "";
+          }
+          if (state.mode === "edit_attacks" && previousShopPurchaseFx > 0 && state.shopPurchaseFxTimer <= 0) {
+            renderEditAttacks();
+            return;
+          }
           if (state.mode === "menu" && isOperationsLocked()) {
             const seconds = Math.ceil(getOperationsCooldownRemainingMs() / 1000);
             if (state.operationsTimerSecond !== seconds) {
@@ -15817,20 +15996,30 @@
         ctx.globalCompositeOperation = "lighter";
         for (const projectile of b.projectiles) {
           if (projectile.type === "beam") {
-            const endX = projectile.x + Math.cos(projectile.angle) * projectile.progress;
-            const endY = projectile.y + Math.sin(projectile.angle) * projectile.progress;
+            const startX = projectile.refracted ? projectile.x : b.x;
+            const startY = projectile.refracted ? projectile.y : b.y;
+            const endX = startX + Math.cos(projectile.angle) * projectile.progress;
+            const endY = startY + Math.sin(projectile.angle) * projectile.progress;
             ctx.strokeStyle = projectile.color;
             ctx.lineWidth = projectile.width;
             ctx.beginPath();
-            ctx.moveTo(projectile.x, projectile.y);
+            ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
             ctx.stroke();
             ctx.strokeStyle = "rgba(255,255,255,0.72)";
             ctx.lineWidth = projectile.width * 0.34;
             ctx.beginPath();
-            ctx.moveTo(projectile.x, projectile.y);
+            ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
             ctx.stroke();
+            const tipGlow = ctx.createRadialGradient(endX, endY, 0, endX, endY, projectile.width * 2.4);
+            tipGlow.addColorStop(0, "rgba(255,255,255,0.95)");
+            tipGlow.addColorStop(0.45, projectile.color);
+            tipGlow.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.fillStyle = tipGlow;
+            ctx.beginPath();
+            ctx.arc(endX, endY, projectile.width * 2.4, 0, TAU);
+            ctx.fill();
             continue;
           }
           ctx.save();
@@ -15898,6 +16087,18 @@
           ctx.lineWidth = 2;
           ctx.stroke();
           ctx.restore();
+        }
+        for (const shockwave of b.shockwaves) {
+          ctx.strokeStyle = "rgba(255,255,255,0.28)";
+          ctx.lineWidth = shockwave.width;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, shockwave.radius, 0, TAU);
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(255, 184, 228, 0.34)";
+          ctx.lineWidth = Math.max(4, shockwave.width * 0.22);
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, shockwave.radius, 0, TAU);
+          ctx.stroke();
         }
         if (b.novaActive > 0) {
           ctx.strokeStyle = "rgba(255,255,255,0.32)";
@@ -19095,6 +19296,16 @@
         if (state.currentBoss === "alarmist" && state.alarmist.redFlashTimer > 0 && ["playing", "paused", "gameover"].includes(state.mode)) {
           const flashAlpha = clamp(state.alarmist.redFlashTimer / 0.5, 0, 1);
           ctx.fillStyle = `rgba(255, 56, 56, ${0.12 + flashAlpha * 0.22})`;
+          ctx.fillRect(0, 0, width, height);
+        }
+        if (state.currentBoss === "beauty" && state.beauty.beamWarnTimer > 0 && ["playing", "paused", "gameover"].includes(state.mode)) {
+          const warnAlpha = clamp(state.beauty.beamWarnTimer / 0.7, 0, 1);
+          const wash = ctx.createRadialGradient(state.beauty.x, state.beauty.y, 0, state.beauty.x, state.beauty.y, Math.max(width, height) * 0.95);
+          wash.addColorStop(0, `rgba(255, 255, 255, ${0.62 + warnAlpha * 0.24})`);
+          wash.addColorStop(0.28, `rgba(255, 236, 248, ${0.42 + warnAlpha * 0.22})`);
+          wash.addColorStop(0.62, `rgba(194, 232, 255, ${0.2 + warnAlpha * 0.18})`);
+          wash.addColorStop(1, `rgba(255, 255, 255, ${0.08 + warnAlpha * 0.1})`);
+          ctx.fillStyle = wash;
           ctx.fillRect(0, 0, width, height);
         }
         if (state.hBombInfernoTimer > 0 && ["playing", "paused", "victory"].includes(state.mode)) {
