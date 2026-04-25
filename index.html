@@ -2406,6 +2406,8 @@
       const TAU = Math.PI * 2;
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
       const lerp = (a, b, t) => a + (b - a) * t;
+      const easeOutCubic = (t) => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+      const easeInCubic = (t) => Math.pow(clamp(t, 0, 1), 3);
       const formatRunTimer = (seconds) => {
         const totalMs = Math.max(0, Math.floor(seconds * 1000));
         const minutes = Math.floor(totalMs / 60000);
@@ -2473,6 +2475,8 @@
           ? "Stalwart Slabhraidh"
           : bossKey === "radiator"
           ? "Radiator the Ultimate Decayer"
+          : bossKey === "decayer"
+          ? "The Guardian Dancing in Despair"
           : "Hertz's Harmony";
       const bosses = [
         {
@@ -2554,10 +2558,10 @@
           teaser: "Another cool name in my opinion. 92U-XIII has a cool name but in turn it does not look good, but how is CDI supposed to control the looks of MAVENs? I mean they didn’t mean for them to look like this."
         },
         {
-          name: "Coming Soon",
-          active: false,
-          status: "RESERVED",
-          teaser: "This containment slot is reserved for a future boss encounter."
+          name: "The Guardian Dancing in Despair",
+          active: true,
+          status: "ACTIVE",
+          teaser: "The final containment failure. A colossal despair-drenched core wrapped in glitching white filaments, orange geometry, and a smaller Ytterbium-born predator waiting inside it."
         },
       ];
       const saveFileSlotDefs = [
@@ -2788,7 +2792,7 @@
         bleach_down: { title: "Baron Neutralized", desc: "Defeat The Bleach Baron." },
         alarmist_down: { title: "Alarm Silenced", desc: "Defeat Ambitious Alarmist-Am." },
         slabhraidh_down: { title: "Bars Broken", desc: "Defeat Stalwart Slabhraidh." },
-        decayer_down: { title: "Core Gone Cold", desc: "Defeat Radiator the Ultimate Decayer." },
+        decayer_down: { title: "Dance Ended", desc: "Defeat The Guardian Dancing in Despair." },
         arsenal_tuned: { title: "Arsenal Tuned", desc: "Purchase your first shop upgrade." },
         score_2500: { title: "Signal Ascendant", desc: "Reach a score of 2500." },
         score_5000: { title: "Signal Unbroken", desc: "Reach a score of 5000." },
@@ -3527,23 +3531,45 @@
           vx: 0,
           vy: 0,
           phase: 1,
-          motionTimer: 0,
           phaseTimer: 0,
+          motionTimer: 0,
           spin: 0,
-          u235Timer: 0,
-          u238Timer: 0,
-          neutronTimer: 0,
-          u234Timer: 0,
+          followTimer: 0,
+          dashTimer: 0,
+          dashDir: 1,
+          snapTimer: 0,
+          cursorTimer: 0,
+          barrierTimer: 0,
+          rainLaserTimer: 0,
+          sphereTimer: 0,
+          debrisTimer: 0,
+          laserModeTimer: 0,
+          laserHoldTimer: 0,
+          laserSpinDir: 1,
+          laserAngle: 0,
+          lastLaserSpinDir: 1,
+          patternStep: 0,
+          streamLane: 0,
+          orbitAngle: 0,
+          orbitRadius: 0,
           trailTimer: 0,
-          fissionTimer: 0,
+          ringTimer: 0,
+          ringBurstCount: 0,
+          ringBurstTimer: 0,
+          shockwaveTimer: 0,
           shuckCooldown: 0,
-          gammaTimer: 0,
-          sideLaserTimer: 0,
+          squiggleTimer: 0,
+          colorWaveTimer: 0,
+          suckPulseTimer: 0,
+          ytterSlowTimer: 0,
+          arenaSpeedTimer: 0,
           projectiles: [],
           lasers: [],
           trail: [],
           rings: [],
           fragments: [],
+          afterimages: [],
+          satellites: [],
           fallenCoreY: 0
         },
         settings: {
@@ -4531,11 +4557,11 @@
       }
 
       function getBossRecordKey(index) {
-        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : index === 11 ? "slabhraidh" : index === 12 ? "radiator" : "architect";
+        return index === 1 ? "sovereign" : index === 2 ? "monarch" : index === 3 ? "cesium" : index === 4 ? "tantalum" : index === 5 ? "luminosity" : index === 6 ? "sili" : index === 7 ? "caesar" : index === 8 ? "beauty" : index === 9 ? "bleach" : index === 10 ? "alarmist" : index === 11 ? "slabhraidh" : index === 12 ? "radiator" : index === 13 ? "decayer" : "architect";
       }
 
       function getBossIndexFromKey(key) {
-        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : key === "sili" ? 6 : key === "caesar" ? 7 : key === "beauty" ? 8 : key === "bleach" ? 9 : key === "alarmist" ? 10 : key === "slabhraidh" ? 11 : key === "radiator" ? 12 : 0;
+        return key === "sovereign" ? 1 : key === "monarch" ? 2 : key === "cesium" ? 3 : key === "tantalum" ? 4 : key === "luminosity" ? 5 : key === "sili" ? 6 : key === "caesar" ? 7 : key === "beauty" ? 8 : key === "bleach" ? 9 : key === "alarmist" ? 10 : key === "slabhraidh" ? 11 : key === "radiator" ? 12 : key === "decayer" ? 13 : 0;
       }
 
       function getBossPayoutCents(key) {
@@ -6474,27 +6500,49 @@
       function resetDecayerState() {
         state.decayer = {
           x: centerX,
-          y: height * 0.18,
+          y: height * 0.16,
           vx: 0,
           vy: 0,
           phase: 1,
-          motionTimer: 0,
           phaseTimer: 0,
+          motionTimer: 0,
           spin: 0,
-          u235Timer: 0.22,
-          u238Timer: 0.88,
-          neutronTimer: 1.1,
-          u234Timer: 4.8,
-          trailTimer: 0.07,
-          fissionTimer: 1.3,
+          followTimer: 5.6,
+          dashTimer: 0,
+          dashDir: 1,
+          snapTimer: 0,
+          cursorTimer: 0.5,
+          barrierTimer: 7.4,
+          rainLaserTimer: 2.8,
+          sphereTimer: 1.1,
+          debrisTimer: 0.45,
+          laserModeTimer: 1.5,
+          laserHoldTimer: 0,
+          laserSpinDir: 1,
+          laserAngle: 0,
+          lastLaserSpinDir: 1,
+          patternStep: 0,
+          streamLane: 0,
+          orbitAngle: 0,
+          orbitRadius: Math.min(width, height) * 0.2,
+          trailTimer: 0.08,
+          ringTimer: 3.8,
+          ringBurstCount: 0,
+          ringBurstTimer: 0,
+          shockwaveTimer: 2.4,
           shuckCooldown: 0,
-          gammaTimer: 0.03,
-          sideLaserTimer: 0.9,
+          squiggleTimer: 0.65,
+          colorWaveTimer: 0.24,
+          suckPulseTimer: 0,
+          ytterSlowTimer: 0,
+          arenaSpeedTimer: 0,
           projectiles: [],
           lasers: [],
           trail: [],
           rings: [],
           fragments: [],
+          afterimages: [],
+          satellites: [],
           fallenCoreY: 0
         };
       }
@@ -6548,7 +6596,7 @@
         }
         resetGame("cutscene");
         state.currentBoss = bossKey;
-        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : state.currentBoss === "caesar" ? 4700 : state.currentBoss === "beauty" ? 5400 : state.currentBoss === "bleach" ? 6200 : state.currentBoss === "alarmist" ? 6900 : state.currentBoss === "slabhraidh" ? 7600 : state.currentBoss === "radiator" ? 8600 : 2400;
+        state.bossMaxHealth = state.currentBoss === "monarch" ? 2100 : state.currentBoss === "cesium" ? 3200 : state.currentBoss === "tantalum" ? 3600 : state.currentBoss === "luminosity" ? 3900 : state.currentBoss === "sili" ? 4300 : state.currentBoss === "caesar" ? 4700 : state.currentBoss === "beauty" ? 5400 : state.currentBoss === "bleach" ? 6200 : state.currentBoss === "alarmist" ? 6900 : state.currentBoss === "slabhraidh" ? 7600 : state.currentBoss === "radiator" ? 8600 : state.currentBoss === "decayer" ? 13900 : 2400;
         if (challengeUsesMultiplierHealth()) {
           state.bossMaxHealth *= 3.5;
         }
@@ -6779,7 +6827,9 @@
       }
 
       function getCurrentBossPhaseCount() {
-        return state.currentBoss === "radiator" || state.currentBoss === "decayer"
+        return state.currentBoss === "decayer"
+          ? 7
+          : state.currentBoss === "radiator"
           ? 6
           : state.currentBoss === "bleach" || state.currentBoss === "alarmist" || state.currentBoss === "slabhraidh"
           ? 5
@@ -6822,6 +6872,21 @@
             : phase === 5
             ? state.bossMaxHealth * 0.22
             : state.bossMaxHealth * 0.08;
+        }
+        if (phaseCount === 7) {
+          return phase === 1
+            ? state.bossMaxHealth * 0.97
+            : phase === 2
+            ? state.bossMaxHealth * 0.83
+            : phase === 3
+            ? state.bossMaxHealth * 0.69
+            : phase === 4
+            ? state.bossMaxHealth * 0.54
+            : phase === 5
+            ? state.bossMaxHealth * 0.38
+            : phase === 6
+            ? state.bossMaxHealth * 0.18
+            : state.bossMaxHealth * 0.06;
         }
         return phase === 1
           ? state.bossMaxHealth * 0.88
@@ -7025,6 +7090,8 @@
         state.decayer.lasers.length = 0;
         state.decayer.trail.length = 0;
         state.decayer.rings.length = 0;
+        state.decayer.afterimages.length = 0;
+        state.decayer.satellites.length = 0;
         state.decayer.fragments.length = 0;
       }
 
@@ -11215,8 +11282,8 @@
           } else if (state.currentBoss === "decayer") {
             warningText.textContent =
               state.cutsceneTime > 1.65
-                ? "Containment 14 Failing... Radiator The Ultimate Decayer Entering Final Criticality."
-                : "Lead Shielding Cracking Open Around A Neon Yellowcake Heart...";
+                ? "Containment 14 Fracturing... The Guardian Dancing In Despair Unfolding A Final Lament."
+                : "Filaments Hissing White Through A Neon Orange Mechanical Halo...";
           } else {
             warningText.textContent =
               state.cutsceneTime > 1.45
@@ -11253,14 +11320,20 @@
         state.slabhraidh.fragments.length = 0;
         state.radiator.fragments.length = 0;
         state.decayer.fragments.length = 0;
+        state.decayer.afterimages.length = 0;
+        state.decayer.satellites.length = 0;
         if (state.currentBoss === "radiator") {
           state.radiator.fallenCoreY = 0;
           state.radiator.centeringFromX = state.radiator.x;
           state.radiator.centeringFromY = state.radiator.y;
+        } else if (state.currentBoss === "decayer") {
+          state.decayer.fallenCoreY = 0;
+          state.decayer.centeringFromX = state.decayer.x;
+          state.decayer.centeringFromY = state.decayer.y;
         }
         overlay.innerHTML = `
           <div class="warning-shell">
-            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : state.currentBoss === "alarmist" ? "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent." : state.currentBoss === "slabhraidh" ? "Stalwart Slabhraidh Seizing Up. Guide Bars Tearing Loose." : state.currentBoss === "radiator" ? "Radiator Cooling To Grey. Critical Decay Chain Finally Breaking." : "Radiator The Ultimate Decayer Is Going Cold. Corium Collapse Imminent."}</div>
+            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : state.currentBoss === "alarmist" ? "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent." : state.currentBoss === "slabhraidh" ? "Stalwart Slabhraidh Seizing Up. Guide Bars Tearing Loose." : state.currentBoss === "radiator" ? "Radiator Cooling To Grey. Critical Decay Chain Finally Breaking." : "The Guardian Dancing In Despair Is Tearing Apart. Ytterbium Light Is Breaking Loose."}</div>
           </div>
         `;
         overlay.classList.add("show");
@@ -11278,6 +11351,12 @@
             state.radiator.fallenCoreY += dt * 240;
           }
           state.radiator.y = lerp(sourceY, centerY, settleBlend) + state.radiator.fallenCoreY;
+        } else if (state.victoryBoss === "decayer") {
+          const settleBlend = clamp(state.victoryTime / 0.7, 0, 1);
+          const sourceX = Number.isFinite(state.decayer.centeringFromX) ? state.decayer.centeringFromX : state.decayer.x;
+          const sourceY = Number.isFinite(state.decayer.centeringFromY) ? state.decayer.centeringFromY : state.decayer.y;
+          state.decayer.x = lerp(sourceX, centerX, settleBlend);
+          state.decayer.y = lerp(sourceY, centerY, settleBlend);
         }
         const victoryText = document.getElementById("victoryText");
         const vortex = state.victoryBoss === "architect"
@@ -11606,8 +11685,8 @@
             victoryText.textContent = "Stalwart Slabhraidh Shattered. Only Cold Steel Debris Remains.";
           } else if (state.victoryBoss === "radiator" && state.victoryTime > 3.2) {
             victoryText.textContent = "Radiator Went Cold. The Grey Core Drops Out Of View.";
-          } else if (state.victoryBoss === "decayer" && state.victoryTime > 3.2) {
-            victoryText.textContent = "The Ultimate Decayer Went Cold. The Grey Mass Falls Out Of View.";
+        } else if (state.victoryBoss === "decayer" && state.victoryTime > 3.2) {
+          victoryText.textContent = "The Guardian Collapses Inward. Ytterbium Bursts Apart In A Final Neon Rupture.";
           } else if (state.victoryBoss === "sovereign" && state.victoryTime > 3.2) {
             victoryText.textContent = "Sovereign Fission Complete. Containment Restored.";
           } else if (state.victoryTime > 3.2) {
@@ -11637,8 +11716,8 @@
               ? "Slabhraidh Grinding To A Stop. Guide Bars Are Tearing Free."
               : state.victoryBoss === "radiator"
               ? "Radiator Dimming To Grey. The Shield Is Slumping Away."
-              : state.victoryBoss === "decayer"
-              ? "The Ultimate Decayer Is Dimming. The Lead Shell Is Peeling Away."
+          : state.victoryBoss === "decayer"
+          ? "The Guardian Is Centering Itself. White Filaments Are Tearing Free."
               : "Caesar Rails Losing Polarity. Core Implosion Starting.";
           } else {
             victoryText.textContent = state.victoryBoss === "architect"
@@ -11665,8 +11744,8 @@
               ? "Stalwart Slabhraidh Work-Hardening One Final Time. Mechanical Failure Imminent."
               : state.victoryBoss === "radiator"
               ? "Radiator Going Grey. Core Collapse Imminent."
-              : state.victoryBoss === "decayer"
-              ? "Radiator The Ultimate Decayer Is Going Grey. Collapse Imminent."
+          : state.victoryBoss === "decayer"
+          ? "The Guardian Dancing In Despair Is Burning Out. Final Collapse Imminent."
               : "Caesar Dy Cracking Silver. Magnetic Collapse Imminent.";
           }
           const fadeStart = 5.6;
@@ -11731,6 +11810,8 @@
           state.decayer.lasers.length = 0;
           state.decayer.trail.length = 0;
           state.decayer.rings.length = 0;
+          state.decayer.afterimages.length = 0;
+          state.decayer.satellites.length = 0;
           state.decayer.fragments.length = 0;
           state.slabhraidh.fragments.length = 0;
           state.victoryProjectilesCleared = true;
@@ -11959,6 +12040,8 @@
         state.decayer.lasers.length = 0;
         state.decayer.trail.length = 0;
         state.decayer.rings.length = 0;
+        state.decayer.afterimages.length = 0;
+        state.decayer.satellites.length = 0;
         state.decayer.fragments.length = 0;
         renderMainMenu();
       }
@@ -12055,10 +12138,6 @@
         if (state.currentBoss === "radiator" && state.radiator.phase === 5 && source === "bullet" && state.radiator.shuckCooldown <= 0) {
           state.radiator.shuckCooldown = 0.045;
           spawnRadiatorShuck();
-        }
-        if (state.currentBoss === "decayer" && state.decayer.phase === 5 && source === "bullet" && state.decayer.shuckCooldown <= 0) {
-          state.decayer.shuckCooldown = 0.04;
-          spawnDecayerShuck();
         }
         if (state.bossHealth <= 0) {
           triggerBossDefeat();
@@ -19734,7 +19813,7 @@
 
       function getDecayerCoreRadius() {
         const d = state.decayer;
-        return d.phase === 6 ? 52 : d.phase >= 4 ? 312 : d.phase === 3 ? 156 : 104;
+        return d.phase >= 7 ? 320 : d.phase === 6 ? 152 : d.phase === 5 ? 214 : d.phase === 4 ? 176 : 162;
       }
 
       function getTriangleWave(time, speed = 1) {
@@ -19889,14 +19968,405 @@
         });
       }
 
+      function spawnGuardianCursor(fromBottom = false, fast = false) {
+        spawnDecayerProjectile({
+          type: "guardian_cursor",
+          x: 50 + Math.random() * Math.max(40, width - 100),
+          y: fromBottom ? height + 26 : -26,
+          vx: (Math.random() - 0.5) * 18,
+          vy: fromBottom ? -(fast ? 340 : 190) : fast ? 340 : 190,
+          size: fast ? 14 : 18,
+          life: 8.5,
+          color: fast ? "rgba(176,255,118,0.94)" : "rgba(255,174,84,0.94)",
+          damage: 0.5
+        });
+      }
+
+      function spawnGuardianBarrierSet() {
+        const d = state.decayer;
+        const angleBase = Math.random() * TAU;
+        for (let i = 0; i < 5; i++) {
+          const angle = angleBase + i * (TAU / 5);
+          const reach = Math.max(width, height) * 0.82;
+          const offset = 120 + i * 42;
+          state.decayer.lasers.push({
+            type: "guardian_barrier",
+            anchorAngle: angle - d.spin * 0.12,
+            bend: Math.sin(i * 1.7) * 0.3,
+            offset,
+            reach,
+            width: 10,
+            life: 3.6,
+            chargeLife: 0.42,
+            extendLife: 0.22,
+            holdLife: 2.5,
+            retractLife: 0.46,
+            progress: 0,
+            active: false,
+            damage: 1,
+            color: "rgba(255,134,56,0.96)"
+          });
+        }
+      }
+
+      function spawnGuardianDropLaser(x) {
+        state.decayer.lasers.push({
+          type: "guardian_drop",
+          x,
+          y1: -40,
+          y2: height + 40,
+          width: 10,
+          life: 1.85,
+          chargeLife: 0.54,
+          extendLife: 0.12,
+          holdLife: 0.64,
+          retractLife: 0.55,
+          progress: 0,
+          active: false,
+          damage: 1,
+          color: "rgba(156,255,110,0.96)"
+        });
+      }
+
+      function spawnGuardianTopLasers() {
+        const count = 1 + Math.floor(Math.random() * 3);
+        const nearOffset = (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 70);
+        const targetX = clamp(player.x + nearOffset, 70, width - 70);
+        const anchors = [targetX];
+        while (anchors.length < count) {
+          const candidate = 70 + Math.random() * (width - 140);
+          if (Math.abs(candidate - targetX) > 240 && anchors.every(x => Math.abs(candidate - x) > 170)) {
+            anchors.push(candidate);
+          }
+        }
+        for (const x of anchors) spawnGuardianDropLaser(x);
+      }
+
+      function getGuardianBarrierSegment(laser) {
+        const d = state.decayer;
+        const coreRadius = getDecayerCoreRadius();
+        const followAngle = laser.anchorAngle + d.spin * 0.24 + Math.sin(state.elapsed * 1.9 + laser.offset * 0.014) * 0.08;
+        const startRadius = coreRadius * 0.82 + (laser.offset - 120) * 0.24;
+        const x1 = d.x + Math.cos(followAngle) * startRadius;
+        const y1 = d.y + Math.sin(followAngle) * startRadius;
+        const endAngle = followAngle + laser.bend + Math.sin(state.elapsed * 1.4 + laser.offset * 0.01) * 0.05;
+        const length = laser.reach * (laser.progress || 0);
+        const x2 = x1 + Math.cos(endAngle) * length;
+        const y2 = y1 + Math.sin(endAngle) * length;
+        return { x1, y1, x2, y2 };
+      }
+
+      function spawnGuardianAfterimage() {
+        state.decayer.afterimages.push({
+          x: state.decayer.x,
+          y: state.decayer.y,
+          vx: (Math.random() - 0.5) * 20,
+          vy: 150 + Math.random() * 70,
+          radius: 52 + Math.random() * 14,
+          life: 3.2,
+          touched: false
+        });
+      }
+
+      function spawnGuardianAfterimageBurst(x, y) {
+        for (let i = 0; i < 39; i++) {
+          const angle = (i / 39) * TAU + Math.random() * 0.05;
+          spawnDecayerProjectile({
+            type: "afterimage_burst",
+            x,
+            y,
+            vx: Math.cos(angle) * (160 + Math.random() * 120),
+            vy: Math.sin(angle) * (160 + Math.random() * 120),
+            size: 16 + Math.random() * 4,
+            life: 3.8,
+            damage: 0.5,
+            color: "rgba(255,245,255,0.92)"
+          });
+        }
+      }
+
+      function spawnGuardianOrbitSpheres() {
+        const d = state.decayer;
+        for (let i = 0; i < 5; i++) {
+          const angle = d.spin + i * (TAU / 5);
+          spawnDecayerProjectile({
+            type: "orbit_sphere",
+            x: d.x + Math.cos(angle) * 48,
+            y: d.y + Math.sin(angle) * 48,
+            vx: Math.cos(angle) * 96,
+            vy: 204 + Math.sin(angle) * 38,
+            size: 20,
+            life: 7.6,
+            damage: 0.5,
+            color: "rgba(255,255,255,0.92)"
+          });
+        }
+      }
+
+      function spawnGuardianDebrisChunk() {
+        const angle = Math.random() * TAU;
+        spawnDecayerProjectile({
+          type: "guardian_debris",
+          x: state.decayer.x + Math.cos(angle) * 60,
+          y: state.decayer.y + Math.sin(angle) * 40,
+          vx: (Math.random() - 0.5) * 140,
+          vy: 180 + Math.random() * 160,
+          size: 16 + Math.random() * 12,
+          life: 6.2,
+          damage: 0.5,
+          spin: (Math.random() - 0.5) * 7,
+          color: "rgba(214,214,214,0.92)"
+        });
+      }
+
+      function spawnGuardianLaserCross() {
+        state.decayer.lasers.push({
+          type: "guardian_cross",
+          angle: state.decayer.spin,
+          width: 14,
+          count: 4,
+          life: 1.72,
+          chargeLife: 0.34,
+          extendLife: 0.2,
+          holdLife: 0.82,
+          retractLife: 0.36,
+          progress: 0,
+          active: false,
+          damage: 1,
+          color: "rgba(255,255,255,0.94)"
+        });
+      }
+
+      function spawnGuardianSeekerRing(spreadOnRed = false) {
+        for (let i = 0; i < 95; i++) {
+          const angle = (i / 95) * TAU;
+          spawnDecayerProjectile({
+            type: "seeker_ring",
+            x: centerX,
+            y: centerY,
+            vx: Math.cos(angle) * 88,
+            vy: Math.sin(angle) * 88,
+            size: 7.2,
+            life: 7.8,
+            delay: 2.3,
+            delaySet: false,
+            spreadOnRed,
+            originAngle: angle,
+            color: "rgba(244,244,244,0.94)"
+          });
+        }
+      }
+
+      function spawnGuardianYtterFan(originX, originY, count = 9, spread = 0.92, speed = 240) {
+        const baseAngle = Math.atan2(player.y - originY, player.x - originX);
+        for (let i = 0; i < count; i++) {
+          const offset = ((i / Math.max(1, count - 1)) - 0.5) * spread;
+          const angle = baseAngle + offset;
+          spawnDecayerProjectile({
+            type: "ytter_fan",
+            x: originX,
+            y: originY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 9.5,
+            life: 6.6,
+            damage: 0.5,
+            color: i % 2 === 0 ? "rgba(246,246,246,0.94)" : "rgba(255,164,84,0.94)"
+          });
+        }
+      }
+
+      function spawnGuardianPetalBurst(originX, originY, count = 12, speed = 170, spinOffset = 0, type = "guardian_petal") {
+        for (let i = 0; i < count; i++) {
+          const angle = spinOffset + (i / count) * TAU;
+          spawnDecayerProjectile({
+            type,
+            x: originX,
+            y: originY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: type === "guardian_shard" ? 10.5 : 8.5,
+            life: 6.1,
+            damage: 0.5,
+            spin: 1.3 + (i % 2) * 0.7,
+            color: i % 2 === 0 ? "rgba(255,174,86,0.96)" : "rgba(242,242,242,0.96)"
+          });
+        }
+      }
+
+      function spawnGuardianCursorWave(y = -24, lanes = 5, fastBias = 0.5) {
+        const gap = width / (lanes + 1);
+        for (let i = 0; i < lanes; i++) {
+          const fast = ((i + state.decayer.patternStep) % 2 === 0) ? Math.random() < fastBias : Math.random() < fastBias * 0.55;
+          spawnDecayerProjectile({
+            type: "guardian_cursor",
+            x: gap * (i + 1),
+            y,
+            vx: Math.sin((state.decayer.patternStep + i) * 0.8) * 24,
+            vy: fast ? 355 : 210,
+            size: fast ? 14 : 18,
+            life: 8.5,
+            color: fast ? "rgba(176,255,118,0.94)" : "rgba(255,174,84,0.94)",
+            damage: 0.5
+          });
+        }
+        state.decayer.patternStep += 1;
+      }
+
+      function spawnGuardianHaloLances(originX, originY, laneCount = 6) {
+        const gap = height / (laneCount + 1);
+        for (let i = 0; i < laneCount; i++) {
+          const laneY = gap * (i + 1);
+          const fromLeft = (i + state.decayer.streamLane) % 2 === 0;
+          spawnDecayerProjectile({
+            type: "guardian_halo_lance",
+            x: fromLeft ? -26 : width + 26,
+            y: laneY,
+            vx: fromLeft ? 255 : -255,
+            vy: Math.sin((state.decayer.streamLane + i) * 0.9) * 42,
+            size: 11,
+            life: 6.2,
+            damage: 0.5,
+            wobble: i * 0.6,
+            color: i % 2 === 0 ? "rgba(164,255,96,0.96)" : "rgba(255,214,112,0.96)"
+          });
+        }
+        state.decayer.streamLane = (state.decayer.streamLane + 1) % 6;
+      }
+
+      function spawnGuardianOrangeCenterBurst() {
+        const d = state.decayer;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * TAU + d.spin * 0.25;
+          spawnDecayerProjectile({
+            type: "center_orange",
+            x: d.x,
+            y: d.y,
+            vx: Math.cos(angle) * 260,
+            vy: Math.sin(angle) * 260,
+            size: 16,
+            life: 4.4,
+            damage: 0.5,
+            color: "rgba(255,144,46,0.96)"
+          });
+        }
+      }
+
+      function spawnGuardianShockwave(x, y) {
+        state.decayer.rings.push({
+          originX: x,
+          originY: y,
+          radius: 22,
+          baseRadius: 22,
+          pulse: Math.random() * TAU,
+          width: 20,
+          life: 3.1,
+          maxLife: 3.1,
+          maxRadius: Math.max(width, height) * 1.05,
+          randomKick: true,
+          hit: false
+        });
+        state.shake = Math.max(state.shake, 18);
+      }
+
+      function spawnGuardianSquiggle(side = "left") {
+        const fromLeft = side === "left";
+        spawnDecayerProjectile({
+          type: "squiggle",
+          x: fromLeft ? -26 : width + 26,
+          y: 120 + Math.random() * (height - 240),
+          vx: fromLeft ? 360 : -360,
+          vy: 0,
+          size: 11,
+          life: 6.6,
+          amp: 48 + Math.random() * 30,
+          wave: 9 + Math.random() * 5,
+          damage: 0.5,
+          color: "rgba(164,255,96,0.96)"
+        });
+      }
+
+      function spawnGuardianPhase7Stream() {
+        const colors = [
+          "rgba(255,96,208,0.94)",
+          "rgba(122,255,182,0.94)",
+          "rgba(255,180,84,0.94)",
+          "rgba(126,214,255,0.94)",
+          "rgba(255,82,82,0.94)"
+        ];
+        const laneBase = 44 + state.decayer.streamLane * 34;
+        for (let i = 0; i < 3; i++) {
+          const laneY = 68 + ((laneBase + i * 176) % Math.max(160, height - 136));
+          spawnDecayerProjectile({
+            type: "phase7_stream",
+            x: width + 40 + i * 30,
+            y: laneY,
+            vx: -(274 + i * 26),
+            vy: Math.sin((state.decayer.streamLane + i) * 0.8) * 34,
+            size: 13 + Math.random() * 6,
+            life: 7,
+            wobble: state.decayer.streamLane * 0.7 + i * 0.55,
+            damage: 0.5,
+            color: colors[Math.floor(Math.random() * colors.length)]
+          });
+        }
+        state.decayer.streamLane = (state.decayer.streamLane + 1) % 8;
+      }
+
+      function spawnGuardianPhase7EdgeBand(top = true) {
+        const bandY = top ? 54 : height - 54;
+        const gapWidth = 190;
+        const gapCenter = clamp(width * 0.62 + Math.sin(state.decayer.streamLane * 0.9) * 90, width * 0.42, width * 0.82);
+        const gapStart = gapCenter - gapWidth * 0.5;
+        const gapEnd = gapCenter + gapWidth * 0.5;
+        const color = top ? "rgba(164,255,96,0.98)" : "rgba(255,178,88,0.98)";
+        state.decayer.lasers.push({
+          type: "guardian_edge_band",
+          x1: 0,
+          x2: width,
+          y: bandY,
+          gapStart,
+          gapEnd,
+          width: 16,
+          life: 1.95,
+          chargeLife: 0.5,
+          extendLife: 0.14,
+          holdLife: 0.72,
+          retractLife: 0.59,
+          progress: 0,
+          active: false,
+          damage: 1,
+          color
+        });
+      }
+
+      function spawnGuardianPhase7EdgeSweep(top = true) {
+        const y = top ? 42 : height - 42;
+        for (let i = 0; i < 3; i++) {
+          spawnDecayerProjectile({
+            type: "guardian_halo_lance",
+            x: width + 30 + i * 34,
+            y: y + (top ? 1 : -1) * i * 10,
+            vx: -(240 + i * 24),
+            vy: top ? 34 + i * 10 : -(34 + i * 10),
+            size: 12,
+            life: 6.4,
+            damage: 0.5,
+            wobble: i * 0.7 + (top ? 0 : Math.PI * 0.5),
+            color: top ? "rgba(164,255,96,0.96)" : "rgba(255,182,96,0.96)"
+          });
+        }
+      }
+
       function getDecayerPhaseFromHealth() {
         const ratio = state.bossHealth / Math.max(1, state.bossMaxHealth);
-        if (ratio > 5 / 6) return 1;
-        if (ratio > 4 / 6) return 2;
-        if (ratio > 3 / 6) return 3;
-        if (ratio > 2 / 6) return 4;
-        if (ratio > 1 / 6) return 5;
-        return 6;
+        if (ratio > 6 / 7) return 1;
+        if (ratio > 5 / 7) return 2;
+        if (ratio > 4 / 7) return 3;
+        if (ratio > 3 / 7) return 4;
+        if (ratio > 2 / 7) return 5;
+        if (ratio > 1 / 7) return 6;
+        return 7;
       }
 
       function updateDecayerBoss(dt) {
@@ -19906,117 +20376,298 @@
           d.phase = nextPhase;
           d.phaseTimer = 0;
           state.bossPhase = nextPhase;
-          addFlash(d.x, d.y, "rgba(255, 244, 176, 0.34)", 240 + nextPhase * 26);
-          addSpark(d.x, d.y, "rgba(255, 240, 182, 0.96)", 34 + nextPhase * 12, 260 + nextPhase * 30);
-          if (nextPhase === 3) d.lasers.length = 0;
+          d.lasers.length = 0;
+          d.rings.length = 0;
+          d.trail.length = 0;
+          d.afterimages.length = 0;
+          addFlash(d.x, d.y, "rgba(255, 248, 255, 0.34)", 320 + nextPhase * 36);
+          addSpark(d.x, d.y, nextPhase >= 6 ? "rgba(214, 255, 120, 0.98)" : "rgba(255, 168, 82, 0.98)", 54 + nextPhase * 10, 300);
           if (nextPhase === 5) {
-            d.rings.length = 0;
-            d.trail.length = 0;
-          }
-          if (nextPhase === 6) {
-            d.lasers.length = 0;
-            d.projectiles.length = 0;
-            d.trail.length = 0;
-            d.rings.length = 0;
-            d.fallenCoreY = 0;
+            d.x = centerX;
+            d.y = centerY;
+            d.vy = 620;
+            d.shockwaveTimer = 0.18;
+            d.satellites = [{ x: d.x, y: d.y, vx: 0, vy: 0, radius: 92, hue: 48 }];
+          } else if (nextPhase === 6) {
+            const source = d.satellites[0] || { x: d.x, y: d.y };
+            d.x = source.x;
+            d.y = source.y;
+            d.vx = 0;
+            d.vy = 0;
+            d.satellites = [];
+            d.ytterSlowTimer = 0;
+          } else if (nextPhase === 7) {
+            d.x = getDecayerCoreRadius() * 0.48;
+            d.y = centerY;
+            d.vx = 0;
+            d.vy = 0;
+            d.suckPulseTimer = 0;
           }
         }
         state.bossPhase = d.phase;
         d.phaseTimer += dt;
         d.motionTimer += dt;
-        d.spin += dt * (d.phase >= 4 ? 2.1 : d.phase >= 2 ? 1.25 : 0.58);
+        const baseSpin = d.phase === 7
+          ? 6.2
+          : d.phase === 6
+          ? 2.65
+          : d.phase === 5
+          ? 2.25
+          : d.phase === 4
+          ? 1.55
+          : d.phase === 3
+          ? 0.34
+          : d.phase === 2
+          ? 1.7
+          : 0.94;
+        d.spin += dt * baseSpin;
+        d.laserAngle += dt * 0.22;
         d.shuckCooldown = Math.max(0, d.shuckCooldown - dt);
+        d.ytterSlowTimer = Math.max(0, d.ytterSlowTimer - dt);
+        d.arenaSpeedTimer = Math.max(0, d.arenaSpeedTimer - dt);
 
-        if (d.phase <= 4) {
-          const ampX = d.phase >= 4 ? width * 0.3 : width * 0.24;
-          const ampY = d.phase >= 4 ? height * 0.29 : height * 0.2;
-          const triangle = getTriangleWave(d.motionTimer, d.phase >= 4 ? 2.45 : 1.72);
-          d.x = centerX + Math.sin(d.motionTimer * (d.phase >= 4 ? 1.3 : 0.72)) * ampX;
-          d.y = 118 + (triangle * 0.5 + 0.5) * ampY;
-        } else if (d.phase === 5) {
-          d.x = centerX + Math.sin(d.motionTimer * 1.1) * width * 0.3;
-          d.y = 92 + Math.cos(d.motionTimer * 1.8) * 42;
-        } else {
-          if (d.phaseTimer < 1.6) {
-            const loopT = d.phaseTimer / 1.6;
-            const side = loopT < 0.25 ? 0 : loopT < 0.5 ? 1 : loopT < 0.75 ? 2 : 3;
-            const local = (loopT % 0.25) / 0.25;
-            if (side === 0) {
-              d.x = lerp(90, width - 90, local);
-              d.y = 90;
-            } else if (side === 1) {
-              d.x = width - 90;
-              d.y = lerp(90, height - 90, local);
-            } else if (side === 2) {
-              d.x = lerp(width - 90, 90, local);
-              d.y = height - 90;
-            } else {
-              d.x = 90;
-              d.y = lerp(height - 90, 90, local);
+        if (d.phase <= 3) {
+          const topY = 108 + Math.sin(d.motionTimer * 1.4) * 16;
+          const laserSlow = d.phase === 3 && d.laserHoldTimer > 0 ? 0.26 : 1;
+          if (d.followTimer > 0) {
+            d.followTimer -= dt;
+            d.x += (player.x - d.x) * Math.min(1, dt * 2.35 * laserSlow);
+            d.y += (topY - d.y) * Math.min(1, dt * 3.4 * Math.max(0.38, laserSlow));
+            if (d.followTimer <= 0) {
+              d.lasers = d.lasers.filter(laser => laser.type !== "guardian_barrier");
+              d.dashTimer = 5 + Math.random() * 2;
+              d.dashDir = Math.random() < 0.7 ? (Math.random() < 0.5 ? -1 : 1) : 0;
+              d.snapTimer = 0;
             }
           } else {
-            d.x += (centerX - d.x) * Math.min(1, dt * 2);
-            d.y += (height * 0.58 - d.y) * Math.min(1, dt * 2);
-          }
-        }
-
-        d.u235Timer -= dt;
-        d.u238Timer -= dt;
-        d.neutronTimer -= dt;
-        d.u234Timer -= dt;
-        d.trailTimer -= dt;
-        d.fissionTimer -= dt;
-        d.gammaTimer -= dt;
-        d.sideLaserTimer -= dt;
-
-        if (d.phase <= 3 && d.u235Timer <= 0) {
-          d.u235Timer = d.phase === 3 ? 0.17 : 0.32;
-          spawnDecayerPhase1Volley();
-        }
-        if (d.phase <= 3 && d.u238Timer <= 0) {
-          d.u238Timer = d.phase === 3 ? 0.66 : 1.05;
-          spawnDecayerHeavyWalls(d.phase === 3 ? 4 : 3);
-        }
-        if (d.phase === 2 && d.neutronTimer <= 0) {
-          d.neutronTimer = 0.9 + Math.random() * 0.6;
-          spawnDecayerNeutronLaser();
-          spawnDecayerNeutronLaser();
-        }
-        if (d.phase === 3 && d.u234Timer <= 0) {
-          d.u234Timer = 4 + Math.random() * 4;
-          spawnDecayerU234();
-        }
-        if (d.phase === 4) {
-          if (d.trailTimer <= 0) {
-            d.trailTimer = 0.08;
-            spawnDecayerTrailPiece();
-          }
-          if (d.fissionTimer <= 0) {
-            d.fissionTimer = 1.05;
-            spawnDecayerFissionRing();
-          }
-        }
-        if (d.phase === 6) {
-          if (d.gammaTimer <= 0) {
-            d.gammaTimer = 0.04;
-            for (let i = 0; i < 12; i++) {
-              const angle = state.elapsed * 4.4 + (i / 12) * TAU + Math.sin(state.elapsed * 3.1 + i) * 0.52;
-              spawnDecayerProjectile({
-                type: "gamma",
-                x: d.x,
-                y: d.y,
-                vx: Math.cos(angle) * (160 + Math.random() * 100),
-                vy: Math.sin(angle) * (160 + Math.random() * 100),
-                size: 2.9,
-                color: "rgba(244,244,244,0.9)",
-                life: 5
-              });
+            d.dashTimer -= dt;
+            if (d.dashDir !== 0) {
+              d.snapTimer -= dt;
+              if (d.snapTimer <= 0) {
+                d.snapTimer = d.phase === 3 && d.laserHoldTimer > 0 ? 0.085 : 0.028;
+                d.x = clamp(d.x + d.dashDir * (d.phase === 3 && d.laserHoldTimer > 0 ? 28 : 76), 110, width - 110);
+                if (!(d.phase === 3 && d.laserHoldTimer > 0)) spawnGuardianAfterimage();
+              }
+              d.x = clamp(d.x + d.dashDir * 980 * dt * Math.max(0.24, laserSlow), 110, width - 110);
+              if (d.phase === 1 && (d.x <= 114 || d.x >= width - 114)) {
+                d.dashDir *= -1;
+              }
+              d.y += (topY - d.y) * Math.min(1, dt * 6.4 * Math.max(0.38, laserSlow));
+            } else {
+              d.x += Math.sin(d.motionTimer * 2.2) * 260 * dt * Math.max(0.28, laserSlow);
+              d.y += (topY - d.y) * Math.min(1, dt * 4.2 * Math.max(0.38, laserSlow));
+            }
+            if (d.dashTimer <= 0) {
+              d.followTimer = 4 + Math.random() * 6;
             }
           }
-          if (d.sideLaserTimer <= 0) {
-            d.sideLaserTimer = 0.58;
-            spawnDecayerSideLaser("left");
-            spawnDecayerSideLaser("right");
+        } else if (d.phase === 4) {
+          d.orbitAngle += dt * 1.22;
+          const rock = Math.sin(d.motionTimer * 4.8) * 138;
+          d.x = centerX + Math.cos(d.orbitAngle) * (width * 0.25) + rock;
+          d.y = centerY + Math.sin(d.orbitAngle) * (height * 0.18);
+        } else if (d.phase === 5) {
+          d.x = centerX;
+          d.y += d.vy * dt;
+          if ((d.y <= 124 && d.vy < 0) || (d.y >= height - 124 && d.vy > 0)) {
+            d.vy *= -1;
+            d.y = clamp(d.y, 124, height - 124);
+            d.shockwaveTimer = 0.08;
+            d.arenaSpeedTimer = 1;
+            spawnGuardianShockwave(centerX, d.y);
+          }
+          if (Math.abs(d.y - centerY) < 42 && d.phaseTimer > 0.28) {
+            d.phaseTimer = 0;
+            spawnGuardianOrangeCenterBurst();
+          }
+          if (!d.satellites.length) {
+            d.satellites.push({ x: d.x, y: d.y, vx: 0, vy: 0, radius: 92, hue: 48 });
+          }
+          const sat = d.satellites[0];
+          if (sat) {
+            const dx = player.x - sat.x;
+            const dy = player.y - sat.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            sat.vx += (dx / dist) * 430 * dt;
+            sat.vy += (dy / dist) * 430 * dt;
+            sat.vx *= 0.962;
+            sat.vy *= 0.962;
+            sat.x += sat.vx * dt;
+            sat.y += sat.vy * dt;
+            sat.radius = 98 + Math.sin(d.motionTimer * 4.6) * 7;
+          }
+        } else if (d.phase === 6) {
+          const speedScale = d.ytterSlowTimer > 0 ? 0.46 : 1;
+          const speed = (248 + Math.sin(d.motionTimer * 2.8) * 92) * speedScale;
+          const dx = player.x - d.x;
+          const dy = player.y - d.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          d.vx += (dx / dist) * speed * dt;
+          d.vy += (dy / dist) * speed * dt;
+          d.vx *= 0.945;
+          d.vy *= 0.945;
+          d.x = clamp(d.x + d.vx * dt, 110, width - 110);
+          d.y = clamp(d.y + d.vy * dt, 96, height - 96);
+        } else {
+          d.x = getDecayerCoreRadius() * 0.48;
+          d.y = centerY + Math.sin(d.motionTimer * 1.8) * 56;
+          d.suckPulseTimer += dt;
+          if (d.suckPulseTimer >= 2) d.suckPulseTimer -= 2;
+          if (d.suckPulseTimer < 0.7) {
+            const dx = d.x + getDecayerCoreRadius() * 0.38 - player.x;
+            const dy = d.y - player.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            player.pullVx += (dx / dist) * 31 * dt * 60;
+            player.pullVy += (dy / dist) * 31 * dt * 60;
+          }
+        }
+
+        d.cursorTimer -= dt;
+        d.barrierTimer -= dt;
+        d.rainLaserTimer -= dt;
+        d.sphereTimer -= dt;
+        d.debrisTimer -= dt;
+        d.laserModeTimer -= dt;
+        d.laserHoldTimer -= dt;
+        d.trailTimer -= dt;
+        d.ringTimer -= dt;
+        d.ringBurstTimer -= dt;
+        d.shockwaveTimer -= dt;
+        d.squiggleTimer -= dt;
+        d.colorWaveTimer -= dt;
+
+        if (d.phase === 1) {
+          if (d.rainLaserTimer <= 0) {
+            d.rainLaserTimer = 3 + Math.random() * 5;
+            spawnGuardianTopLasers();
+          }
+          if (d.cursorTimer <= 0) {
+            d.cursorTimer = 0.19;
+            spawnGuardianCursor(false, Math.random() < 0.45);
+            spawnGuardianCursor(false, Math.random() < 0.68);
+            if (Math.random() < 0.5) spawnGuardianCursor(false, true);
+            if (Math.random() < 0.65) spawnGuardianCursor(false, Math.random() < 0.58);
+            if (Math.random() < 0.32) spawnGuardianCursorWave(-24, 5, 0.58);
+          }
+          if (d.followTimer > 0 && d.barrierTimer <= 0) {
+            d.barrierTimer = 5 + Math.random() * 6;
+            spawnGuardianBarrierSet();
+          } else if (d.followTimer <= 0 && d.barrierTimer < 0.18) {
+            d.barrierTimer = 0.18;
+          }
+        } else if (d.phase === 2) {
+          if (d.rainLaserTimer <= 0) {
+            d.rainLaserTimer = 3 + Math.random() * 5;
+            spawnGuardianTopLasers();
+          }
+          if (d.sphereTimer <= 0) {
+            d.sphereTimer = 1.1;
+            spawnGuardianOrbitSpheres();
+            if ((d.patternStep++ % 2) === 0) {
+              spawnGuardianPetalBurst(d.x, d.y, 10, 150, d.spin * 0.25);
+            }
+          }
+          if (d.debrisTimer <= 0) {
+            d.debrisTimer = 0.13 + Math.random() * 0.1;
+            spawnGuardianDebrisChunk();
+          }
+        } else if (d.phase === 3) {
+          if (d.rainLaserTimer <= 0) {
+            d.rainLaserTimer = 3 + Math.random() * 5;
+            spawnGuardianTopLasers();
+          }
+          if (d.cursorTimer <= 0) {
+            d.cursorTimer = 0.24;
+            spawnGuardianCursor(false, Math.random() < 0.4);
+            spawnGuardianCursor(true, Math.random() < 0.4);
+            if (Math.random() < 0.55) spawnGuardianCursor(false, Math.random() < 0.48);
+          }
+          if (d.laserModeTimer <= 0) {
+            d.laserModeTimer = 1.18 + Math.random() * 0.56;
+            d.laserSpinDir = d.lastLaserSpinDir === 1 ? -1 : 1;
+            if (Math.random() < 0.22) d.laserSpinDir = d.lastLaserSpinDir;
+            d.lastLaserSpinDir = d.laserSpinDir;
+            d.laserHoldTimer = 1.18;
+            spawnGuardianLaserCross();
+            spawnGuardianPetalBurst(d.x, d.y, 8, 145, d.laserAngle, "guardian_shard");
+          }
+          if (d.laserHoldTimer > 0) {
+            d.laserAngle += d.laserSpinDir * dt * 0.48;
+          } else {
+            d.laserAngle += dt * 0.08;
+          }
+        } else if (d.phase === 4) {
+          if (d.rainLaserTimer <= 0) {
+            d.rainLaserTimer = 3 + Math.random() * 5;
+            spawnGuardianTopLasers();
+          }
+          if (d.trailTimer <= 0) {
+            d.trailTimer = 0.06;
+            d.trail.push({
+              x: d.x,
+              y: d.y,
+              radius: 26 + Math.random() * 14,
+              life: 4.2,
+              damage: 0.5
+            });
+          }
+          if (d.cursorTimer <= 0) {
+            d.cursorTimer = 0.25;
+            spawnGuardianCursor(false, Math.random() < 0.4);
+            spawnGuardianCursor(false, Math.random() < 0.58);
+            if (Math.random() < 0.72) spawnGuardianCursor(false, true);
+            if (Math.random() < 0.45) spawnGuardianCursorWave(-24, 6, 0.64);
+          }
+          if (d.ringTimer <= 0) {
+            d.ringTimer = 4.6 + Math.random() * 1.7;
+            d.ringBurstCount = 4;
+            d.ringBurstTimer = 0.01;
+          }
+          if (d.ringBurstCount > 0 && d.ringBurstTimer <= 0) {
+            spawnGuardianSeekerRing(d.ringBurstCount === 1);
+            if (d.ringBurstCount === 2) spawnGuardianPetalBurst(d.x, d.y, 14, 138, d.orbitAngle * 0.8, "guardian_shard");
+            d.ringBurstCount -= 1;
+            d.ringBurstTimer = d.ringBurstCount > 0 ? 0.24 : 999;
+          }
+        } else if (d.phase === 5) {
+          if (d.rainLaserTimer <= 0) {
+            d.rainLaserTimer = 3 + Math.random() * 5;
+            spawnGuardianTopLasers();
+          }
+          if (d.cursorTimer <= 0) {
+            d.cursorTimer = 0.32;
+            spawnGuardianCursor(false, Math.random() < 0.5);
+            spawnGuardianCursor(false, Math.random() < 0.62);
+            if (Math.random() < 0.5) spawnGuardianCursor(false, true);
+          }
+          if (d.sphereTimer <= 0 && d.satellites[0]) {
+            d.sphereTimer = 1.18;
+            spawnGuardianYtterFan(d.satellites[0].x, d.satellites[0].y, 9, 0.96, 250);
+            spawnGuardianPetalBurst(d.x, d.y, 10, 155, d.spin * 0.4);
+          }
+        } else if (d.phase === 6) {
+          if (d.cursorTimer <= 0) {
+            d.cursorTimer = 0.34;
+            spawnGuardianCursor(false, Math.random() < 0.52);
+            if (Math.random() < 0.6) spawnGuardianCursor(false, true);
+          }
+          if (d.sphereTimer <= 0) {
+            d.sphereTimer = 1.05;
+            spawnGuardianYtterFan(d.x, d.y, 11, 1.02, 260);
+            if ((d.patternStep++ % 2) === 0) spawnGuardianHaloLances(d.x, d.y, 6);
+          }
+          if (d.squiggleTimer <= 0) {
+            d.squiggleTimer = 0.3 + Math.random() * 0.18;
+            spawnGuardianSquiggle(Math.random() < 0.5 ? "left" : "right");
+          }
+        } else if (d.phase === 7) {
+          if (d.colorWaveTimer <= 0) {
+            d.colorWaveTimer = 0.14;
+            spawnGuardianPhase7Stream();
+          }
+          if (d.squiggleTimer <= 0) {
+            d.squiggleTimer = 1.02;
+            spawnGuardianPhase7EdgeBand((d.patternStep++ % 2) === 0);
           }
         }
 
@@ -20025,112 +20676,314 @@
         const coreRadius = getDecayerCoreRadius();
         const coreDist = Math.hypot(player.x - d.x, player.y - d.y);
         nearest = Math.min(nearest, coreDist);
-        if (coreDist < 120) closeCount++;
-        if (coreDist < player.hitRadius + coreRadius * 0.52) damagePlayer(1, "impact");
+        if (coreDist < 150) closeCount++;
+        if (coreDist < player.hitRadius + coreRadius * 0.54) damagePlayer(d.phase >= 6 ? 1 : 0.5, "impact");
+
+        if (d.phase === 5 && d.satellites[0]) {
+          const sat = d.satellites[0];
+          const satDist = Math.hypot(player.x - sat.x, player.y - sat.y);
+          nearest = Math.min(nearest, satDist);
+          if (satDist < sat.radius + player.hitRadius) damagePlayer(1, "impact");
+        }
+
+        for (let i = d.afterimages.length - 1; i >= 0; i--) {
+          const afterimage = d.afterimages[i];
+          afterimage.life -= dt;
+          afterimage.x += afterimage.vx * dt;
+          afterimage.y += afterimage.vy * dt;
+          const dist = Math.hypot(player.x - afterimage.x, player.y - afterimage.y);
+          nearest = Math.min(nearest, dist);
+          if (!afterimage.touched && dist < afterimage.radius + player.hitRadius) {
+            afterimage.touched = true;
+            spawnGuardianAfterimageBurst(afterimage.x, afterimage.y);
+          }
+          if (afterimage.life <= 0 || afterimage.y > height + 120) d.afterimages.splice(i, 1);
+        }
 
         for (let i = d.projectiles.length - 1; i >= 0; i--) {
           const projectile = d.projectiles[i];
           projectile.life -= dt;
-          if (projectile.type === "u234") {
-            projectile.retargetTimer -= dt;
-            if (projectile.retargetTimer <= 0) {
-              projectile.retargetTimer = 0.5;
-              projectile.lockX = player.x;
-              projectile.lockY = player.y;
-            }
-            const dx = projectile.lockX - projectile.x;
-            const dy = projectile.lockY - projectile.y;
+          projectile.rotation += (projectile.spin || 0) * dt;
+          if (projectile.type === "orbit_sphere") {
+            const dx = player.x - projectile.x;
+            const dy = player.y - projectile.y;
             const dist = Math.hypot(dx, dy) || 1;
-            projectile.vx += (dx / dist) * 210 * dt;
-            projectile.vy += (dy / dist) * 210 * dt;
-            const speed = Math.hypot(projectile.vx, projectile.vy) || 1;
-            const maxSpeed = 228;
-            projectile.vx *= maxSpeed / speed;
-            projectile.vy *= maxSpeed / speed;
-          } else if (projectile.type === "gamma") {
-            const angle = Math.atan2(projectile.vy, projectile.vx) + Math.sin(state.elapsed * 5 + projectile.x * 0.01) * 0.04;
-            const speed = Math.hypot(projectile.vx, projectile.vy) || 1;
-            projectile.vx = Math.cos(angle) * speed;
-            projectile.vy = Math.sin(angle) * speed;
+            projectile.vx += (dx / dist) * 240 * dt;
+            projectile.vy += (dy / dist) * 240 * dt;
+            projectile.vx *= 0.992;
+            projectile.vy *= 0.992;
+          } else if (projectile.type === "guardian_debris") {
+            projectile.vy += 70 * dt;
+            if (projectile.y > height + projectile.size && !projectile.split) {
+              projectile.split = true;
+              const count = 2 + Math.floor(Math.random() * 3);
+              for (let shard = 0; shard < count; shard++) {
+                spawnDecayerProjectile({
+                  type: "debris_return",
+                  x: projectile.x,
+                  y: height + 18,
+                  vx: (Math.random() - 0.5) * 40,
+                  vy: -(160 + Math.random() * 120),
+                  size: projectile.size * 0.46,
+                  life: 3,
+                  damage: 0.5,
+                  color: "rgba(244,244,244,0.9)"
+                });
+              }
+              projectile.life = 0;
+            }
+          } else if (projectile.type === "debris_return") {
+            const dx = d.x - projectile.x;
+            const dy = d.y - projectile.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            projectile.vx += (dx / dist) * 200 * dt;
+            projectile.vy += (dy / dist) * 200 * dt;
+          } else if (projectile.type === "seeker_ring") {
+            if (projectile.delay > 0) {
+              projectile.delay -= dt;
+              if (projectile.delay <= 0 && !projectile.delaySet) {
+                projectile.delaySet = true;
+                projectile.color = "rgba(255,86,86,0.96)";
+                if (projectile.spreadOnRed) {
+                  const spreadAngle = projectile.originAngle + Math.sin(projectile.originAngle * 5.2) * 0.22;
+                  projectile.vx = Math.cos(spreadAngle) * 250;
+                  projectile.vy = Math.sin(spreadAngle) * 250;
+                } else {
+                  projectile.targetX = player.x;
+                  projectile.targetY = player.y;
+                }
+              }
+            } else if (!projectile.spreadOnRed) {
+              const dx = projectile.targetX - projectile.x;
+              const dy = projectile.targetY - projectile.y;
+              const dist = Math.hypot(dx, dy) || 1;
+              projectile.vx += (dx / dist) * 310 * dt;
+              projectile.vy += (dy / dist) * 310 * dt;
+            }
+          } else if (projectile.type === "squiggle") {
+            projectile.wobble = (projectile.wobble || 0) + dt * projectile.wave;
+            projectile.vy = Math.sin(projectile.wobble) * projectile.amp;
+            const selfDist = Math.hypot(d.x - projectile.x, d.y - projectile.y);
+            if (d.phase === 6 && selfDist < projectile.size + coreRadius * 0.45) {
+              d.ytterSlowTimer = 1.7;
+              projectile.life = 0;
+            }
+          } else if (projectile.type === "phase7_stream") {
+            projectile.wobble += dt * 4.8;
+            projectile.vy = Math.sin(projectile.wobble) * 80;
+          } else if (projectile.type === "ytter_fan") {
+            projectile.vx *= 0.9985;
+            projectile.vy *= 0.9985;
           }
-          projectile.x += projectile.vx * dt;
-          projectile.y += projectile.vy * dt;
+
+          projectile.x += projectile.vx * dt * (d.arenaSpeedTimer > 0 ? 1.5 : 1);
+          projectile.y += projectile.vy * dt * (d.arenaSpeedTimer > 0 ? 1.5 : 1);
           const dist = Math.hypot(player.x - projectile.x, player.y - projectile.y);
           nearest = Math.min(nearest, dist);
-          if (dist < 105) closeCount++;
-          if (dist < player.hitRadius + projectile.size * 0.88) damagePlayer(projectile.damage, "impact");
-          if (projectile.life <= 0 || projectile.x < -180 || projectile.x > width + 180 || projectile.y < -180 || projectile.y > height + 180) {
+          if (dist < 108) closeCount++;
+          if (dist < player.hitRadius + projectile.size * 0.86) damagePlayer(projectile.damage ?? 0.5, "impact");
+          if (projectile.life <= 0 || projectile.x < -220 || projectile.x > width + 220 || projectile.y < -220 || projectile.y > height + 220) {
             d.projectiles.splice(i, 1);
           }
         }
 
         for (let i = d.lasers.length - 1; i >= 0; i--) {
           const laser = d.lasers[i];
-          const prevX = laser.x;
-          const prevY = laser.y;
-          laser.x += laser.vx * dt;
-          laser.y += laser.vy * dt;
           laser.life -= dt;
-          let bounced = false;
-          if (laser.x <= 0 || laser.x >= width) {
-            if (laser.type === "neutron" && laser.bounced === 0) {
-              laser.vx *= -1;
-              laser.x = clamp(laser.x, 0, width);
-              laser.bounced = 1;
-              bounced = true;
+          if (laser.type === "guardian_barrier" || laser.type === "guardian_cross" || laser.type === "guardian_drop" || laser.type === "guardian_edge_band") {
+            const totalLife = (laser.chargeLife || 0) + (laser.extendLife || 0) + (laser.holdLife || 0) + (laser.retractLife || 0);
+            const elapsed = Math.max(0, totalLife - laser.life);
+            const chargeLife = laser.chargeLife || 0;
+            const extendLife = laser.extendLife || 0;
+            const holdLife = laser.holdLife || 0;
+            const retractLife = laser.retractLife || 0;
+            if (elapsed < chargeLife) {
+              laser.progress = 0;
+              laser.active = false;
+            } else if (elapsed < chargeLife + extendLife) {
+              const t = clamp((elapsed - chargeLife) / Math.max(0.0001, extendLife), 0, 1);
+              laser.progress = easeOutCubic(t);
+              laser.active = laser.progress > 0.55;
+            } else if (elapsed < chargeLife + extendLife + holdLife) {
+              laser.progress = 1;
+              laser.active = true;
             } else {
-              laser.life = 0;
+              const t = clamp((elapsed - chargeLife - extendLife - holdLife) / Math.max(0.0001, retractLife), 0, 1);
+              laser.progress = 1 - easeInCubic(t);
+              laser.active = laser.progress > 0.25;
             }
           }
-          if (laser.y <= 0 || laser.y >= height) {
-            if (laser.type === "neutron" && laser.bounced === 0) {
-              laser.vy *= -1;
-              laser.y = clamp(laser.y, 0, height);
-              laser.bounced = 1;
-              bounced = true;
-            } else {
-              laser.life = 0;
+          if (laser.type === "guardian_barrier") {
+            const segment = getGuardianBarrierSegment(laser);
+            const dist = distanceToSegment(player.x, player.y, segment.x1, segment.y1, segment.x2, segment.y2);
+            nearest = Math.min(nearest, dist);
+            if (laser.active && dist < player.hitRadius + laser.width * 0.5) damagePlayer(laser.damage ?? 1, "impact");
+          } else if (laser.type === "guardian_drop") {
+            const liveY2 = lerp(laser.y1, laser.y2, laser.progress || 0);
+            const dist = distanceToSegment(player.x, player.y, laser.x, laser.y1, laser.x, liveY2);
+            nearest = Math.min(nearest, dist);
+            if (laser.active && dist < player.hitRadius + laser.width * 0.58) damagePlayer(laser.damage ?? 1, "impact");
+          } else if (laser.type === "guardian_edge_band") {
+            const liveX1 = lerp((laser.gapStart + laser.gapEnd) * 0.5, laser.x1, laser.progress || 0);
+            const liveX2 = lerp((laser.gapStart + laser.gapEnd) * 0.5, laser.x2, laser.progress || 0);
+            const leftEnd = lerp((laser.gapStart + laser.gapEnd) * 0.5, laser.gapStart, laser.progress || 0);
+            const rightStart = lerp((laser.gapStart + laser.gapEnd) * 0.5, laser.gapEnd, laser.progress || 0);
+            const leftDist = distanceToSegment(player.x, player.y, liveX1, laser.y, leftEnd, laser.y);
+            const rightDist = distanceToSegment(player.x, player.y, rightStart, laser.y, liveX2, laser.y);
+            const dist = Math.min(leftDist, rightDist);
+            nearest = Math.min(nearest, dist);
+            if (laser.active && dist < player.hitRadius + laser.width * 0.6) damagePlayer(laser.damage ?? 1, "impact");
+          } else if (laser.type === "guardian_cross") {
+            laser.angle = d.laserAngle;
+            for (let arm = 0; arm < laser.count; arm++) {
+              const angle = laser.angle + arm * (TAU / laser.count);
+              const x2 = d.x + Math.cos(angle) * Math.max(width, height) * (laser.progress || 0);
+              const y2 = d.y + Math.sin(angle) * Math.max(width, height) * (laser.progress || 0);
+              const dist = distanceToSegment(player.x, player.y, d.x, d.y, x2, y2);
+              nearest = Math.min(nearest, dist);
+              if (laser.active && dist < player.hitRadius + laser.width * 0.5) damagePlayer(0.5, "impact");
             }
           }
-          const beamDist = distanceToSegment(player.x, player.y, prevX, prevY, laser.x, laser.y);
-          nearest = Math.min(nearest, beamDist);
-          if (beamDist < player.hitRadius + laser.width * 0.5) damagePlayer(0.5, "impact");
-          if (laser.type === "neutron") {
-            for (const projectile of d.projectiles) {
-              if (projectile.type !== "u235") continue;
-              const dist = distanceToSegment(projectile.x, projectile.y, prevX, prevY, laser.x, laser.y);
-              if (dist < projectile.size + laser.width) {
-                spawnDecayerOrangeBurst(projectile.x, projectile.y);
-                projectile.life = 0;
-              }
-            }
-          }
-          if (laser.life <= 0 || (!bounced && (laser.x < -220 || laser.x > width + 220 || laser.y < -220 || laser.y > height + 220))) {
-            d.lasers.splice(i, 1);
-          }
+          if (laser.life <= 0) d.lasers.splice(i, 1);
         }
 
         for (let i = d.trail.length - 1; i >= 0; i--) {
           const trail = d.trail[i];
           trail.life -= dt;
+          trail.y -= 34 * dt;
           const dist = Math.hypot(player.x - trail.x, player.y - trail.y);
           nearest = Math.min(nearest, dist);
-          if (dist < player.hitRadius + trail.radius) damagePlayer(trail.damage, "impact");
+          if (dist < player.hitRadius + trail.radius) damagePlayer(trail.damage ?? 0.5, "impact");
           if (trail.life <= 0) d.trail.splice(i, 1);
         }
 
         for (let i = d.rings.length - 1; i >= 0; i--) {
           const ring = d.rings[i];
           ring.life -= dt;
-          ring.pulse += dt * 4.6;
-          ring.radius = ring.baseRadius + (1 - ring.life / 4.2) * 260 + Math.sin(ring.pulse) * 34;
-          const dist = Math.abs(Math.hypot(player.x - d.x, player.y - d.y) - ring.radius);
+          ring.pulse += dt * 5.2;
+          const progress = clamp(1 - ring.life / (ring.maxLife || 2.8), 0, 1);
+          ring.radius = lerp(ring.baseRadius, ring.maxRadius || 340, progress) + Math.sin(ring.pulse) * 10;
+          const dist = Math.abs(Math.hypot(player.x - ring.originX, player.y - ring.originY) - ring.radius);
           nearest = Math.min(nearest, dist);
-          if (dist < ring.width + player.hitRadius) damagePlayer(ring.damage, "impact");
+          if (!ring.hit && dist < ring.width + player.hitRadius) {
+            ring.hit = true;
+            playShockwaveSound();
+            const knockAngle = Math.random() * TAU;
+            player.pullVx += Math.cos(knockAngle) * 300;
+            player.pullVy += Math.sin(knockAngle) * 300;
+            state.shake = Math.max(state.shake, 20);
+          }
           if (ring.life <= 0) d.rings.splice(i, 1);
         }
 
         applyThreatResponse(dt, nearest, closeCount);
+      }
+
+      function drawGuardianYtterbiumBody(x, y, radius, time, isFinal = false) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(time);
+        const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.5);
+        aura.addColorStop(0, isFinal ? "rgba(255,255,255,0.36)" : "rgba(218,255,116,0.3)");
+        aura.addColorStop(0.4, isFinal ? "rgba(255,82,208,0.28)" : "rgba(176,255,120,0.26)");
+        aura.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 1.5, 0, TAU);
+        ctx.fill();
+
+        ctx.strokeStyle = isFinal ? "rgba(255,255,255,0.52)" : "rgba(176,255,122,0.52)";
+        ctx.lineWidth = 4;
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate(i * (TAU / 3) + time * 0.6);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radius * (0.9 + i * 0.12), radius * (0.3 + i * 0.06), i * 0.24, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = isFinal ? "rgba(255,140,220,0.78)" : "rgba(255,186,92,0.72)";
+        ctx.lineWidth = 2.6;
+        for (let i = 0; i < 6; i++) {
+          ctx.save();
+          ctx.rotate(i * (TAU / 6) - time * 0.95);
+          ctx.beginPath();
+          ctx.moveTo(0, -radius * 1.18);
+          ctx.lineTo(radius * 0.16, -radius * 0.78);
+          ctx.lineTo(-radius * 0.16, -radius * 0.78);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = isFinal ? "rgba(255,255,255,0.52)" : "rgba(255,164,84,0.56)";
+        ctx.lineWidth = 1.8;
+        for (let i = 0; i < 12; i++) {
+          ctx.save();
+          ctx.rotate(i * (TAU / 12) + time * 0.42);
+          ctx.beginPath();
+          ctx.moveTo(0, -radius * 1.24);
+          ctx.lineTo(0, -radius * 1.48);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = isFinal ? "rgba(120,255,232,0.88)" : "rgba(255,255,255,0.78)";
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate(-time * 1.35 + i * (TAU / 3));
+          ctx.beginPath();
+          ctx.moveTo(0, -radius * 1.36);
+          ctx.lineTo(radius * 0.24, -radius * 0.9);
+          ctx.lineTo(0, -radius * 0.64);
+          ctx.lineTo(-radius * 0.24, -radius * 0.9);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        const core = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        core.addColorStop(0, "rgba(255,255,255,0.96)");
+        core.addColorStop(0.35, isFinal ? "rgba(255,102,214,0.94)" : "rgba(208,255,112,0.94)");
+        core.addColorStop(0.8, isFinal ? "rgba(108,220,255,0.48)" : "rgba(96,255,176,0.42)");
+        core.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, TAU);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.74)";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          ctx.save();
+          ctx.rotate(time * 1.2 + i * (TAU / 4));
+          ctx.beginPath();
+          ctx.moveTo(0, -radius * 0.86);
+          ctx.lineTo(radius * 0.08, -radius * 0.56);
+          ctx.lineTo(radius * 0.3, -radius * 0.54);
+          ctx.lineTo(radius * 0.12, -radius * 0.28);
+          ctx.lineTo(0, -radius * 0.42);
+          ctx.lineTo(-radius * 0.12, -radius * 0.28);
+          ctx.lineTo(-radius * 0.3, -radius * 0.54);
+          ctx.lineTo(-radius * 0.08, -radius * 0.56);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = isFinal ? "rgba(255,112,196,0.76)" : "rgba(190,255,120,0.74)";
+        ctx.lineWidth = 2.2;
+        for (let i = 0; i < 8; i++) {
+          ctx.save();
+          ctx.rotate(i * (TAU / 8) + time * 0.5);
+          ctx.beginPath();
+          ctx.arc(0, -radius * 1.04, radius * 0.1, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
       }
 
       function drawDecayerBoss() {
@@ -20138,79 +20991,170 @@
         const coreRadius = getDecayerCoreRadius();
         const renderX = d.x;
         const renderY = d.y + ((state.mode === "victory" && state.victoryBoss === "decayer") ? d.fallenCoreY : 0);
-        const showShield = d.phase !== 6;
+
+        if (d.phase >= 6) {
+          drawGuardianYtterbiumBody(renderX, renderY, coreRadius, state.elapsed * 2.6, d.phase >= 7);
+          return;
+        }
+
         ctx.save();
         ctx.translate(renderX, renderY);
-        ctx.rotate(d.spin * (d.phase >= 4 ? 0.35 : 0.14));
+        ctx.rotate(d.spin * 0.14);
 
         const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius * 1.65);
-        aura.addColorStop(0, "rgba(255,244,176,0.18)");
-        aura.addColorStop(0.38, d.phase >= 5 ? "rgba(214,255,116,0.14)" : "rgba(234,255,132,0.12)");
+        aura.addColorStop(0, "rgba(255,255,255,0.2)");
+        aura.addColorStop(0.28, "rgba(184,255,114,0.28)");
+        aura.addColorStop(0.52, "rgba(255,154,72,0.26)");
         aura.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = aura;
         ctx.beginPath();
-        ctx.arc(0, 0, coreRadius * 1.65, 0, TAU);
+        ctx.arc(0, 0, coreRadius * 1.95, 0, TAU);
         ctx.fill();
 
-        const finLength = coreRadius * (d.phase >= 4 ? 1.1 : 0.92);
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 56; i++) {
+          const angle = (i / 56) * TAU;
+          const inner = coreRadius * 0.82;
+          const outer = coreRadius * (1.28 + Math.sin(state.elapsed * 8 + i) * 0.08);
+          ctx.strokeStyle = `rgba(255,255,255,${0.12 + (i % 4) * 0.03})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+          ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "rgba(255,134,58,0.96)";
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        for (let i = 0; i < 18; i++) {
+          const angle = (i / 18) * TAU;
+          const radius = i % 2 === 0 ? coreRadius * 1.18 : coreRadius * 1.38;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(0,0,0,0.88)";
+        ctx.lineWidth = 8;
+        ctx.strokeRect(-coreRadius * 1.62, -coreRadius * 0.82, coreRadius * 0.22, coreRadius * 1.64);
+        ctx.strokeRect(coreRadius * 1.4, -coreRadius * 0.82, coreRadius * 0.22, coreRadius * 1.64);
+        ctx.strokeStyle = "rgba(255,255,255,0.24)";
+        ctx.lineWidth = 2;
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-coreRadius * 1.62, i * coreRadius * 0.22);
+          ctx.lineTo(-coreRadius * 1.4, i * coreRadius * 0.22 + coreRadius * 0.08);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(coreRadius * 1.4, i * coreRadius * 0.22 + coreRadius * 0.08);
+          ctx.lineTo(coreRadius * 1.62, i * coreRadius * 0.22);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.68)";
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
           ctx.save();
-          ctx.rotate((i / 4) * TAU + Math.sin(state.elapsed * 18 + i) * 0.05);
-          ctx.fillStyle = "rgba(28,28,30,0.96)";
-          ctx.fillRect(coreRadius * 0.32, -12, finLength, 24);
-          ctx.fillStyle = "rgba(255,166,84,0.34)";
-          for (let tooth = 0; tooth < 4; tooth++) {
-            ctx.fillRect((coreRadius * 0.42 + tooth * finLength * 0.16), -11, 6, 22);
-          }
+          ctx.rotate(d.spin * 0.18 + i * (TAU / 3));
+          ctx.beginPath();
+          ctx.moveTo(0, -coreRadius * 1.34);
+          ctx.lineTo(coreRadius * 0.22, -coreRadius * 1.02);
+          ctx.lineTo(-coreRadius * 0.22, -coreRadius * 1.02);
+          ctx.closePath();
+          ctx.stroke();
           ctx.restore();
         }
 
-        if (showShield) {
-          ctx.fillStyle = d.phase >= 4 ? "rgba(88,86,82,0.94)" : "rgba(70,72,76,0.96)";
+        ctx.strokeStyle = "rgba(255,146,58,0.88)";
+        ctx.lineWidth = 3.5;
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate(-d.spin * 0.36 + i * (TAU / 3));
           ctx.beginPath();
-          ctx.moveTo(0, -coreRadius * 1.12);
-          ctx.lineTo(coreRadius * 0.78, -coreRadius * 0.42);
-          ctx.lineTo(coreRadius * 1.02, coreRadius * 0.18);
-          ctx.lineTo(coreRadius * 0.34, coreRadius * 0.96);
-          ctx.lineTo(0, coreRadius * 0.56);
-          ctx.lineTo(-coreRadius * 0.34, coreRadius * 0.96);
-          ctx.lineTo(-coreRadius * 1.02, coreRadius * 0.18);
-          ctx.lineTo(-coreRadius * 0.78, -coreRadius * 0.42);
+          ctx.moveTo(0, -coreRadius * 1.54);
+          ctx.lineTo(coreRadius * 0.42, -coreRadius * 1.06);
+          ctx.lineTo(-coreRadius * 0.42, -coreRadius * 1.06);
           ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = "rgba(18,18,18,0.8)";
-          ctx.lineWidth = 4;
           ctx.stroke();
-          ctx.strokeStyle = "rgba(144,144,148,0.36)";
-          ctx.lineWidth = 2;
-          for (let crack = 0; crack < 6; crack++) {
-            ctx.beginPath();
-            ctx.moveTo(-coreRadius * 0.2 + crack * 12, -coreRadius * 0.56 + crack * 8);
-            ctx.lineTo(-coreRadius * 0.06 + crack * 10, -coreRadius * 0.2 + crack * 10);
-            ctx.lineTo(coreRadius * 0.04 + crack * 6, coreRadius * 0.16 + crack * 8);
-            ctx.stroke();
-          }
+          ctx.restore();
         }
 
+        for (let i = 0; i < 5; i++) {
+          ctx.save();
+          ctx.rotate(-d.spin * 0.2 + i * (TAU / 5));
+          ctx.strokeStyle = "rgba(255,255,255,0.42)";
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(0, -coreRadius * 0.88);
+          ctx.lineTo(coreRadius * 0.08, -coreRadius * 0.58);
+          ctx.lineTo(coreRadius * 0.34, -coreRadius * 0.56);
+          ctx.lineTo(coreRadius * 0.14, -coreRadius * 0.36);
+          ctx.lineTo(coreRadius * 0.18, -coreRadius * 0.06);
+          ctx.lineTo(0, -coreRadius * 0.24);
+          ctx.lineTo(-coreRadius * 0.18, -coreRadius * 0.06);
+          ctx.lineTo(-coreRadius * 0.14, -coreRadius * 0.36);
+          ctx.lineTo(-coreRadius * 0.34, -coreRadius * 0.56);
+          ctx.lineTo(-coreRadius * 0.08, -coreRadius * 0.58);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.48)";
+        ctx.lineWidth = 1.6;
+        for (let i = 0; i < 8; i++) {
+          ctx.save();
+          ctx.rotate(d.spin * 0.42 + i * (TAU / 8));
+          ctx.beginPath();
+          ctx.moveTo(0, -coreRadius * 1.12);
+          ctx.lineTo(coreRadius * 0.1, -coreRadius * 0.9);
+          ctx.lineTo(coreRadius * 0.3, -coreRadius * 0.88);
+          ctx.lineTo(coreRadius * 0.12, -coreRadius * 0.7);
+          ctx.lineTo(0, -coreRadius * 0.82);
+          ctx.lineTo(-coreRadius * 0.12, -coreRadius * 0.7);
+          ctx.lineTo(-coreRadius * 0.3, -coreRadius * 0.88);
+          ctx.lineTo(-coreRadius * 0.1, -coreRadius * 0.9);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 1.4;
+        for (let i = 0; i < 24; i++) {
+          const angle = (i / 24) * TAU + d.spin * 0.2;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle) * (coreRadius * 1.02), Math.sin(angle) * (coreRadius * 1.02));
+          ctx.lineTo(Math.cos(angle) * (coreRadius * 1.54), Math.sin(angle) * (coreRadius * 1.54));
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.24)";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-coreRadius * 0.72, -coreRadius * 0.72, coreRadius * 1.44, coreRadius * 1.44);
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeRect(-coreRadius * 0.54, -coreRadius * 0.54, coreRadius * 1.08, coreRadius * 1.08);
+        ctx.rotate(-Math.PI / 4);
+
         const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius * 0.72);
-        core.addColorStop(0, d.phase === 6 ? "rgba(255,255,255,0.98)" : "rgba(255,255,224,0.96)");
-        core.addColorStop(0.28, "rgba(255,244,132,0.94)");
-        core.addColorStop(0.7, d.phase >= 5 ? "rgba(238,255,118,0.9)" : "rgba(220,255,92,0.88)");
-        core.addColorStop(1, "rgba(220,255,92,0)");
+        core.addColorStop(0, "rgba(255,255,255,0.98)");
+        core.addColorStop(0.28, "rgba(224,255,120,0.96)");
+        core.addColorStop(0.56, "rgba(184,255,114,0.82)");
+        core.addColorStop(0.82, "rgba(255,164,72,0.34)");
+        core.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = core;
         ctx.beginPath();
-        ctx.arc(0, 0, coreRadius * 0.72, 0, TAU);
+        ctx.arc(0, 0, coreRadius * 0.76, 0, TAU);
         ctx.fill();
 
-        if (d.phase === 6) {
-          ctx.fillStyle = "rgba(88,84,78,0.96)";
-          ctx.beginPath();
-          ctx.moveTo(-coreRadius * 1.1, coreRadius * 0.3);
-          ctx.quadraticCurveTo(-coreRadius * 0.6, -coreRadius * 0.24, 0, -coreRadius * 0.16);
-          ctx.quadraticCurveTo(coreRadius * 0.6, 0, coreRadius * 1.18, coreRadius * 0.42);
-          ctx.quadraticCurveTo(coreRadius * 0.48, coreRadius * 0.96, -coreRadius * 0.92, coreRadius * 0.86);
-          ctx.closePath();
-          ctx.fill();
+        if (d.phase === 5 && d.satellites[0]) {
+          const sat = d.satellites[0];
+          ctx.restore();
+          drawGuardianYtterbiumBody(sat.x, sat.y, sat.radius, state.elapsed * 2.1, false);
+          return;
         }
         ctx.restore();
       }
@@ -20219,43 +21163,286 @@
         const d = state.decayer;
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
+
+        for (const afterimage of d.afterimages) {
+          const alpha = clamp(afterimage.life / 2.8, 0, 1);
+          const glow = ctx.createRadialGradient(afterimage.x, afterimage.y, 0, afterimage.x, afterimage.y, afterimage.radius * 1.3);
+          glow.addColorStop(0, `rgba(255,146,74,${alpha * 0.34})`);
+          glow.addColorStop(0.45, `rgba(255,104,38,${alpha * 0.26})`);
+          glow.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(afterimage.x, afterimage.y, afterimage.radius * 1.3, 0, TAU);
+          ctx.fill();
+        }
+
         for (const projectile of d.projectiles) {
           ctx.save();
           ctx.translate(projectile.x, projectile.y);
-          ctx.rotate(Math.atan2(projectile.vy, projectile.vx));
-          if (projectile.type === "u238") {
-            ctx.fillStyle = projectile.color;
-            ctx.fillRect(-projectile.size * 0.72, -projectile.size * 0.72, projectile.size * 1.44, projectile.size * 1.44);
-          } else if (projectile.type === "u234") {
+          ctx.rotate(Math.atan2(projectile.vy, projectile.vx) + (projectile.rotation || 0));
+          if (projectile.type === "guardian_cursor") {
+            const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, projectile.size * 1.45);
+            glow.addColorStop(0, "rgba(255,255,255,0.94)");
+            glow.addColorStop(0.34, projectile.color);
+            glow.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.size * 1.4, 0, TAU);
+            ctx.fill();
+            ctx.strokeStyle = projectile.color;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(0, -projectile.size);
+            ctx.lineTo(projectile.size * 0.65, 0);
+            ctx.lineTo(0, projectile.size);
+            ctx.lineTo(-projectile.size * 0.65, 0);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(255,255,255,0.86)";
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+          } else if (projectile.type === "orbit_sphere" || projectile.type === "afterimage_burst") {
+            const orb = ctx.createRadialGradient(0, 0, 0, 0, 0, projectile.size * 1.35);
+            orb.addColorStop(0, "rgba(255,255,255,0.96)");
+            orb.addColorStop(0.4, projectile.color);
+            orb.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.fillStyle = orb;
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.size * 1.35, 0, TAU);
+            ctx.fill();
+          } else if (projectile.type === "guardian_debris" || projectile.type === "debris_return") {
             ctx.fillStyle = projectile.color;
             ctx.beginPath();
-            ctx.arc(0, 0, projectile.size, 0, TAU);
+            ctx.moveTo(projectile.size, 0);
+            ctx.lineTo(projectile.size * 0.15, -projectile.size * 0.95);
+            ctx.lineTo(-projectile.size * 0.9, -projectile.size * 0.28);
+            ctx.lineTo(-projectile.size * 0.72, projectile.size * 0.84);
+            ctx.lineTo(projectile.size * 0.28, projectile.size * 0.68);
+            ctx.closePath();
             ctx.fill();
-          } else {
+          } else if (projectile.type === "center_orange" || projectile.type === "phase7_stream") {
             ctx.fillStyle = projectile.color;
-            ctx.fillRect(-projectile.size, -projectile.size * 0.22, projectile.size * 2, projectile.size * 0.44);
+            ctx.beginPath();
+            ctx.moveTo(projectile.size * 1.2, 0);
+            ctx.lineTo(-projectile.size * 0.6, -projectile.size * 0.42);
+            ctx.lineTo(-projectile.size * 0.95, 0);
+            ctx.lineTo(-projectile.size * 0.6, projectile.size * 0.42);
+            ctx.closePath();
+            ctx.fill();
+          } else if (projectile.type === "squiggle") {
+            ctx.strokeStyle = projectile.color;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+              const px = -projectile.size + i * (projectile.size * 0.3);
+              const py = Math.sin(i * 0.9 + state.elapsed * 10) * projectile.size * 0.38;
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+          } else if (projectile.type === "seeker_ring") {
+            ctx.fillStyle = projectile.color;
+            ctx.beginPath();
+            ctx.rect(-projectile.size * 0.5, -projectile.size * 0.5, projectile.size, projectile.size);
+            ctx.fill();
+          } else if (projectile.type === "ytter_fan") {
+            ctx.fillStyle = projectile.color;
+            ctx.beginPath();
+            ctx.moveTo(projectile.size * 1.15, 0);
+            ctx.lineTo(-projectile.size * 0.25, -projectile.size * 0.42);
+            ctx.lineTo(-projectile.size * 0.9, 0);
+            ctx.lineTo(-projectile.size * 0.25, projectile.size * 0.42);
+            ctx.closePath();
+            ctx.fill();
+          } else if (projectile.type === "guardian_petal" || projectile.type === "guardian_shard" || projectile.type === "guardian_halo_lance") {
+            const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, projectile.size * 1.45);
+            glow.addColorStop(0, "rgba(255,255,255,0.96)");
+            glow.addColorStop(0.34, projectile.color);
+            glow.addColorStop(1, "rgba(255,255,255,0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, projectile.size * 1.2, 0, TAU);
+            ctx.fill();
+            ctx.strokeStyle = projectile.color;
+            ctx.lineWidth = projectile.type === "guardian_halo_lance" ? 3 : 2.4;
+            ctx.beginPath();
+            ctx.moveTo(projectile.size * 1.1, 0);
+            ctx.lineTo(0, -projectile.size * 0.62);
+            ctx.lineTo(-projectile.size * 1.1, 0);
+            ctx.lineTo(0, projectile.size * 0.62);
+            ctx.closePath();
+            ctx.stroke();
           }
           ctx.restore();
         }
         for (const laser of d.lasers) {
-          ctx.strokeStyle = laser.color;
-          ctx.lineWidth = laser.width;
-          ctx.beginPath();
-          ctx.moveTo(laser.x, laser.y);
-          ctx.lineTo(laser.x - laser.vx * 0.08, laser.y - laser.vy * 0.08);
-          ctx.stroke();
+          if (laser.type === "guardian_barrier") {
+            const progress = laser.progress ?? 1;
+            const segment = getGuardianBarrierSegment(laser);
+            const telegraphAlpha = !laser.active ? 0.22 + progress * 0.22 : 0;
+            if (telegraphAlpha > 0.01) {
+              ctx.strokeStyle = `rgba(255,255,255,${telegraphAlpha})`;
+              ctx.lineWidth = Math.max(2, laser.width * 0.42);
+              ctx.setLineDash([10, 12]);
+              ctx.beginPath();
+              ctx.moveTo(segment.x1, segment.y1);
+              ctx.lineTo(segment.x2, segment.y2);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            const gradient = ctx.createLinearGradient(segment.x1, segment.y1, segment.x2, segment.y2);
+            gradient.addColorStop(0, "rgba(255,255,255,0.1)");
+            gradient.addColorStop(0.25, "rgba(188,255,124,0.55)");
+            gradient.addColorStop(0.7, laser.color);
+            gradient.addColorStop(1, "rgba(255,132,56,0.1)");
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = laser.width * (laser.active ? 2.3 : 1.05);
+            ctx.beginPath();
+            ctx.moveTo(segment.x1, segment.y1);
+            ctx.lineTo(segment.x2, segment.y2);
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(255,255,255,0.92)";
+            ctx.lineWidth = Math.max(1.2, laser.width * (laser.active ? 0.54 : 0.22));
+            ctx.beginPath();
+            ctx.moveTo(segment.x1, segment.y1);
+            ctx.lineTo(segment.x2, segment.y2);
+            ctx.stroke();
+            ctx.fillStyle = `rgba(255,168,88,${0.18 + progress * 0.26})`;
+            ctx.beginPath();
+            ctx.arc(segment.x1, segment.y1, laser.width * (0.68 + progress * 0.12), 0, TAU);
+            ctx.fill();
+          } else if (laser.type === "guardian_drop") {
+            const progress = laser.progress ?? 1;
+            const liveY2 = lerp(laser.y1, laser.y2, progress);
+            if (!laser.active) {
+              ctx.strokeStyle = `rgba(255,255,255,${0.18 + progress * 0.22})`;
+              ctx.lineWidth = Math.max(2, laser.width * 0.28);
+              ctx.setLineDash([8, 10]);
+              ctx.beginPath();
+              ctx.moveTo(laser.x, laser.y1);
+              ctx.lineTo(laser.x, liveY2);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            const gradient = ctx.createLinearGradient(laser.x, laser.y1, laser.x, liveY2);
+            gradient.addColorStop(0, "rgba(255,255,255,0.08)");
+            gradient.addColorStop(0.28, "rgba(168,255,126,0.7)");
+            gradient.addColorStop(0.72, laser.color);
+            gradient.addColorStop(1, "rgba(255,255,255,0.08)");
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = laser.width * (laser.active ? 2.2 : 0.95);
+            ctx.beginPath();
+            ctx.moveTo(laser.x, laser.y1);
+            ctx.lineTo(laser.x, liveY2);
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = laser.width * (laser.active ? 0.42 : 0.16);
+            ctx.beginPath();
+            ctx.moveTo(laser.x, laser.y1);
+            ctx.lineTo(laser.x, liveY2);
+            ctx.stroke();
+          } else if (laser.type === "guardian_edge_band") {
+            const progress = laser.progress ?? 1;
+            const center = (laser.gapStart + laser.gapEnd) * 0.5;
+            const liveX1 = lerp(center, laser.x1, progress);
+            const liveX2 = lerp(center, laser.x2, progress);
+            const leftEnd = lerp(center, laser.gapStart, progress);
+            const rightStart = lerp(center, laser.gapEnd, progress);
+            if (!laser.active) {
+              ctx.strokeStyle = `rgba(255,255,255,${0.18 + progress * 0.22})`;
+              ctx.lineWidth = Math.max(2, laser.width * 0.26);
+              ctx.setLineDash([10, 12]);
+              ctx.beginPath();
+              ctx.moveTo(liveX1, laser.y);
+              ctx.lineTo(leftEnd, laser.y);
+              ctx.moveTo(rightStart, laser.y);
+              ctx.lineTo(liveX2, laser.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            const leftGradient = ctx.createLinearGradient(liveX1, laser.y, leftEnd, laser.y);
+            leftGradient.addColorStop(0, "rgba(255,255,255,0.08)");
+            leftGradient.addColorStop(0.28, laser.color);
+            leftGradient.addColorStop(1, "rgba(255,255,255,0.08)");
+            ctx.strokeStyle = leftGradient;
+            ctx.lineWidth = laser.width * (laser.active ? 2.1 : 0.92);
+            ctx.beginPath();
+            ctx.moveTo(liveX1, laser.y);
+            ctx.lineTo(leftEnd, laser.y);
+            ctx.stroke();
+            const rightGradient = ctx.createLinearGradient(rightStart, laser.y, liveX2, laser.y);
+            rightGradient.addColorStop(0, "rgba(255,255,255,0.08)");
+            rightGradient.addColorStop(0.72, laser.color);
+            rightGradient.addColorStop(1, "rgba(255,255,255,0.08)");
+            ctx.strokeStyle = rightGradient;
+            ctx.beginPath();
+            ctx.moveTo(rightStart, laser.y);
+            ctx.lineTo(liveX2, laser.y);
+            ctx.stroke();
+            ctx.strokeStyle = "rgba(255,255,255,0.88)";
+            ctx.lineWidth = laser.width * (laser.active ? 0.34 : 0.14);
+            ctx.beginPath();
+            ctx.moveTo(liveX1, laser.y);
+            ctx.lineTo(leftEnd, laser.y);
+            ctx.moveTo(rightStart, laser.y);
+            ctx.lineTo(liveX2, laser.y);
+            ctx.stroke();
+          } else if (laser.type === "guardian_cross") {
+            const progress = laser.progress ?? 1;
+            for (let arm = 0; arm < laser.count; arm++) {
+              const angle = laser.angle + arm * (TAU / laser.count);
+              const x2 = d.x + Math.cos(angle) * Math.max(width, height) * progress;
+              const y2 = d.y + Math.sin(angle) * Math.max(width, height) * progress;
+              if (!laser.active) {
+                ctx.strokeStyle = `rgba(255,255,255,${0.16 + progress * 0.18})`;
+                ctx.lineWidth = Math.max(2, laser.width * 0.28);
+                ctx.setLineDash([8, 10]);
+                ctx.beginPath();
+                ctx.moveTo(d.x, d.y);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
+              const gradient = ctx.createLinearGradient(d.x, d.y, x2, y2);
+              gradient.addColorStop(0, "rgba(255,255,255,0.16)");
+              gradient.addColorStop(0.22, "rgba(214,255,128,0.78)");
+              gradient.addColorStop(0.52, "rgba(255,255,255,0.98)");
+              gradient.addColorStop(1, "rgba(255,148,78,0.2)");
+              ctx.strokeStyle = gradient;
+              ctx.lineWidth = laser.width * (laser.active ? 2.25 : 0.95);
+              ctx.beginPath();
+              ctx.moveTo(d.x, d.y);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+              ctx.strokeStyle = "rgba(255,255,255,0.92)";
+              ctx.lineWidth = laser.width * (laser.active ? 0.5 : 0.16);
+              ctx.beginPath();
+              ctx.moveTo(d.x, d.y);
+              ctx.lineTo(x2, y2);
+              ctx.stroke();
+            }
+            ctx.fillStyle = `rgba(255,255,255,${laser.active ? 0.42 : 0.2})`;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, laser.width * (0.8 + progress * 0.14), 0, TAU);
+            ctx.fill();
+          }
         }
         for (const trail of d.trail) {
-          ctx.fillStyle = `rgba(168,255,126,${trail.life / 4.6 * 0.16})`;
+          const cloud = ctx.createRadialGradient(trail.x, trail.y, 0, trail.x, trail.y, trail.radius * 1.5);
+          const alpha = clamp(trail.life / 3.4, 0, 1);
+          cloud.addColorStop(0, `rgba(255,255,255,${alpha * 0.1})`);
+          cloud.addColorStop(0.36, `rgba(255,126,126,${alpha * 0.2})`);
+          cloud.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = cloud;
           ctx.beginPath();
-          ctx.arc(trail.x, trail.y, trail.radius, 0, TAU);
+          ctx.arc(trail.x, trail.y, trail.radius * 1.5, 0, TAU);
           ctx.fill();
         }
         for (const ring of d.rings) {
-          ctx.strokeStyle = "rgba(255,236,176,0.32)";
+          ctx.strokeStyle = "rgba(255,190,110,0.36)";
           ctx.lineWidth = ring.width;
           ctx.beginPath();
-          ctx.arc(d.x, d.y, ring.radius, 0, TAU);
+          ctx.arc(ring.originX, ring.originY, ring.radius, 0, TAU);
           ctx.stroke();
         }
         ctx.restore();
@@ -20264,33 +21451,66 @@
       function drawDecayerPreview(ctxPreview, time) {
         ctxPreview.save();
         ctxPreview.translate(64, 64);
-        ctxPreview.rotate(time * 0.22);
-        for (let i = 0; i < 4; i++) {
-          ctxPreview.save();
-          ctxPreview.rotate((i / 4) * TAU + Math.sin(time * 10 + i) * 0.04);
-          ctxPreview.fillStyle = "rgba(24,24,28,0.96)";
-          ctxPreview.fillRect(22, -6, 34, 12);
-          ctxPreview.restore();
-        }
-        ctxPreview.fillStyle = "rgba(74,74,80,0.96)";
+        ctxPreview.rotate(time * 0.18);
+        const radius = 26;
+        const aura = ctxPreview.createRadialGradient(0, 0, 0, 0, 0, 58);
+        aura.addColorStop(0, "rgba(255,255,255,0.1)");
+        aura.addColorStop(0.28, "rgba(184,255,114,0.14)");
+        aura.addColorStop(0.5, "rgba(255,152,82,0.14)");
+        aura.addColorStop(1, "rgba(255,255,255,0)");
+        ctxPreview.fillStyle = aura;
         ctxPreview.beginPath();
-        ctxPreview.moveTo(0, -38);
-        ctxPreview.lineTo(28, -16);
-        ctxPreview.lineTo(38, 10);
-        ctxPreview.lineTo(14, 36);
-        ctxPreview.lineTo(0, 20);
-        ctxPreview.lineTo(-14, 36);
-        ctxPreview.lineTo(-38, 10);
-        ctxPreview.lineTo(-28, -16);
-        ctxPreview.closePath();
+        ctxPreview.arc(0, 0, 58, 0, TAU);
         ctxPreview.fill();
-        const core = ctxPreview.createRadialGradient(0, 0, 0, 0, 0, 28);
-        core.addColorStop(0, "rgba(255,255,232,0.96)");
-        core.addColorStop(0.4, "rgba(255,244,132,0.94)");
-        core.addColorStop(1, "rgba(220,255,98,0)");
+
+        ctxPreview.strokeStyle = "rgba(255,138,58,0.92)";
+        ctxPreview.lineWidth = 2.6;
+        ctxPreview.beginPath();
+        for (let i = 0; i < 16; i++) {
+          const angle = (i / 16) * TAU;
+          const ring = i % 2 === 0 ? radius * 1.22 : radius * 1.42;
+          const x = Math.cos(angle) * ring;
+          const y = Math.sin(angle) * ring;
+          if (i === 0) ctxPreview.moveTo(x, y);
+          else ctxPreview.lineTo(x, y);
+        }
+        ctxPreview.closePath();
+        ctxPreview.stroke();
+
+        ctxPreview.strokeStyle = "rgba(255,255,255,0.24)";
+        ctxPreview.lineWidth = 2;
+        ctxPreview.strokeRect(-radius * 0.84, -radius * 0.84, radius * 1.68, radius * 1.68);
+        ctxPreview.rotate(Math.PI / 4);
+        ctxPreview.strokeRect(-radius * 0.58, -radius * 0.58, radius * 1.16, radius * 1.16);
+        ctxPreview.rotate(-Math.PI / 4);
+
+        const core = ctxPreview.createRadialGradient(0, 0, 0, 0, 0, radius * 0.92);
+        core.addColorStop(0, "rgba(255,255,255,0.98)");
+        core.addColorStop(0.4, "rgba(214,255,122,0.94)");
+        core.addColorStop(0.8, "rgba(255,158,84,0.22)");
+        core.addColorStop(1, "rgba(255,255,255,0)");
         ctxPreview.fillStyle = core;
         ctxPreview.beginPath();
-        ctxPreview.arc(0, 0, 28, 0, TAU);
+        ctxPreview.arc(0, 0, radius * 0.92, 0, TAU);
+        ctxPreview.fill();
+        ctxPreview.restore();
+        ctxPreview.save();
+        ctxPreview.translate(88, 92);
+        ctxPreview.rotate(time * 1.6);
+        ctxPreview.strokeStyle = "rgba(176,255,122,0.34)";
+        ctxPreview.lineWidth = 1.5;
+        for (let i = 0; i < 2; i++) {
+          ctxPreview.beginPath();
+          ctxPreview.ellipse(0, 0, 10 + i * 2, 4 + i, i * 0.28, 0, TAU);
+          ctxPreview.stroke();
+        }
+        const satelliteCore = ctxPreview.createRadialGradient(0, 0, 0, 0, 0, 10);
+        satelliteCore.addColorStop(0, "rgba(255,255,255,0.96)");
+        satelliteCore.addColorStop(0.4, "rgba(208,255,112,0.94)");
+        satelliteCore.addColorStop(1, "rgba(255,255,255,0)");
+        ctxPreview.fillStyle = satelliteCore;
+        ctxPreview.beginPath();
+        ctxPreview.arc(0, 0, 10, 0, TAU);
         ctxPreview.fill();
         ctxPreview.restore();
       }
@@ -20298,20 +21518,26 @@
       function drawDecayerSigil(progress) {
         ctx.save();
         ctx.translate(centerX, centerY);
-        ctx.rotate(progress * 0.42);
-        ctx.strokeStyle = `rgba(255,244,176,${0.2 + progress * 0.34})`;
-        ctx.lineWidth = 5;
+        ctx.rotate(progress * 0.5);
+        ctx.strokeStyle = `rgba(255,255,255,${0.16 + progress * 0.2})`;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-120, -120, 240, 240);
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeRect(-78, -78, 156, 156);
+        ctx.rotate(-Math.PI / 4);
+        ctx.strokeStyle = `rgba(255,150,64,${0.18 + progress * 0.26})`;
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.moveTo(0, -136);
-        ctx.lineTo(108, -28);
-        ctx.lineTo(88, 112);
-        ctx.lineTo(0, 46);
-        ctx.lineTo(-88, 112);
-        ctx.lineTo(-108, -28);
+        for (let i = 0; i < 18; i++) {
+          const angle = (i / 18) * TAU;
+          const radius = i % 2 === 0 ? 92 : 126;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
         ctx.closePath();
         ctx.stroke();
-        ctx.rotate(Math.PI / 4);
-        ctx.strokeRect(-84, -84, 168, 168);
         ctx.restore();
       }
 
@@ -21242,7 +22468,9 @@
           : state.currentBoss === "radiator"
           ? "Radiator"
           : state.currentBoss === "decayer"
-          ? "Decayer"
+          ? state.decayer.phase >= 6
+            ? "Ytterbium"
+            : "Guardian"
           : "Hertz's Harmony";
         bossValue.textContent = `${bossLabel} P${state.bossPhase} - ${bossPercent}%`;
         bossFill.style.width = `${bossPercent}%`;
@@ -21758,7 +22986,7 @@
           ctx.fillStyle = wash;
           ctx.fillRect(0, 0, width, height);
         }
-        if (state.currentBoss === "decayer" && state.decayer.phase === 6 && ["playing", "paused", "gameover"].includes(state.mode)) {
+        if (state.currentBoss === "decayer" && state.decayer.phase >= 6 && ["playing", "paused", "gameover"].includes(state.mode)) {
           ctx.fillStyle = "rgba(12, 12, 12, 0.62)";
           ctx.fillRect(0, 0, width, height);
         }
