@@ -3251,6 +3251,9 @@
           packetTimer: 0,
           flashTimer: 0,
           retaliateTimer: 0,
+          pendingRetaliation: false,
+          retaliateTargetX: 0,
+          retaliateTargetY: 0,
           absorbShotsRemaining: 0,
           loadingBarTimer: 0,
           lightningTimer: 0,
@@ -6194,6 +6197,9 @@
           packetTimer: 0.8,
           flashTimer: 0,
           retaliateTimer: 2.8,
+          pendingRetaliation: false,
+          retaliateTargetX: centerX,
+          retaliateTargetY: height * 0.5,
           absorbShotsRemaining: 0,
           loadingBarTimer: 4,
           lightningTimer: 1.8,
@@ -7521,7 +7527,28 @@
         addSpark(centerX, centerY, "rgba(255, 255, 255, 0.95)", 80, 360);
       }
 
-      function getBossTargetState() {
+      function getBossTargetState(seekerX = null, seekerY = null) {
+        if (state.currentBoss === "sili" && state.sili.phase === 2) {
+          const siliUnits = getSiliUnitStates();
+          const candidates = [siliUnits.unitA, siliUnits.unitB].filter(Boolean);
+          const originX = seekerX ?? player.x;
+          const originY = seekerY ?? player.y;
+          let best = candidates[0];
+          let bestDist = Infinity;
+          for (const unit of candidates) {
+            const dist = Math.hypot(originX - unit.x, originY - unit.y);
+            if (dist < bestDist) {
+              best = unit;
+              bestDist = dist;
+            }
+          }
+          if (best) {
+            return {
+              pos: { x: best.x, y: best.y },
+              radius: best.size + 10
+            };
+          }
+        }
         return {
           pos: state.currentBoss === "architect"
             ? getVortexPosition()
@@ -8621,7 +8648,7 @@
           nearest = Math.min(nearest, liveDist);
           if (liveDist < 100) closeCount++;
           if (Math.abs(liveDx) < cursor.size * 1.15 && Math.abs(liveDy) < cursor.size * 1.35) {
-            damagePlayer(1, "impact");
+            damagePlayer(0.5, "impact");
           }
           if (cursor.life <= 0 || cursor.x < -80 || cursor.x > width + 80) {
             c.cursors.splice(i, 1);
@@ -8743,20 +8770,25 @@
 
       function spawnTantalumPlateWall() {
         const t = state.tantalum;
-        const speed = 300;
-        const targetY = clamp(player.y, 70, height - 70);
-        const direction = player.x >= t.x ? 1 : -1;
+        const speed = 560;
+        const targetY = height * 0.5;
+        const direction = player.x >= centerX ? 1 : -1;
+        const startX = direction > 0 ? -156 : width + 156;
         t.packets.push({
           kind: "plate_wall",
-          x: t.x,
+          x: startX,
           y: targetY,
+          baseY: targetY,
           vx: direction * speed,
           vy: 0,
-          life: 6.2,
+          life: 8.4,
           age: 0,
-          width: 188,
-          height: 22,
-          angle: 0
+          width: 248,
+          height: 28,
+          angle: 0,
+          wobbleAmp: 22,
+          wobbleFreq: 7.8,
+          wobblePhase: Math.random() * TAU
         });
       }
 
@@ -8766,7 +8798,7 @@
           type: "sweep",
           x: fromLeft ? -220 : width + 220,
           y,
-          vx: fromLeft ? 560 : -560,
+          vx: fromLeft ? 620 : -620,
           width: 310,
           height: 30,
           telegraph: 0.42,
@@ -8792,6 +8824,7 @@
         const angle = Math.atan2(targetY - t.y, targetX - t.x);
         const perpendicularX = -Math.sin(angle);
         const perpendicularY = Math.cos(angle);
+        const reachRatio = t.phase === 3 ? 0.93 : 0.75;
         for (const offset of [-24, 24]) {
           const originX = t.x + perpendicularX * offset;
           const originY = t.y + perpendicularY * offset;
@@ -8800,6 +8833,7 @@
           const dx = tipX - originX;
           const dy = tipY - originY;
           const distance = Math.hypot(dx, dy) || 1;
+          const beamDistance = Math.max(120, distance * reachRatio);
           const vx = (dx / distance) * 240;
           const vy = (dy / distance) * 240;
           state.tantalum.beams.push({
@@ -8809,7 +8843,7 @@
             vx,
             vy,
             angle,
-            length: Math.max(220, distance),
+            length: beamDistance,
             width: 20,
             telegraph: 0.7,
             active: 4.2,
@@ -8855,6 +8889,12 @@
         if (nextPhase !== t.phase) {
           t.phase = nextPhase;
           state.bossPhase = nextPhase;
+          t.pendingRetaliation = false;
+          t.flashTimer = 0;
+          t.absorbShotsRemaining = 0;
+          if (nextPhase >= 2) {
+            t.retaliateTimer = nextPhase === 3 ? 5 + Math.random() * 3 : 6 + Math.random() * 3;
+          }
           addFlash(t.x, t.y, "rgba(140, 240, 255, 0.7)", 160 + nextPhase * 24);
           addSpark(t.x, t.y, "rgba(150, 246, 255, 0.96)", 24 + nextPhase * 8, 200 + nextPhase * 24);
         }
@@ -8907,22 +8947,26 @@
         }
 
         if (t.phase >= 2) {
+          const previousFlash = t.flashTimer;
           t.flashTimer = Math.max(0, t.flashTimer - dt);
+          if (t.pendingRetaliation && previousFlash > 0 && t.flashTimer <= 0) {
+            triggerTantalumRetaliation(t.retaliateTargetX, t.retaliateTargetY);
+            t.pendingRetaliation = false;
+          }
           t.retaliateTimer -= dt;
           if (t.retaliateTimer <= 0 && t.flashTimer <= 0) {
             t.flashTimer = 0.55;
-            t.absorbShotsRemaining = 1;
-            t.retaliateTimer = (t.phase === 3 ? 1.8 : 2) + Math.random() * (t.phase === 3 ? 2.2 : 4);
+            t.absorbShotsRemaining = 0;
+            t.pendingRetaliation = true;
+            t.retaliateTargetX = player.x;
+            t.retaliateTargetY = player.y;
+            t.retaliateTimer = t.phase === 3 ? 5 + Math.random() * 3 : 6 + Math.random() * 3;
             addFlash(t.x, t.y, "rgba(255, 255, 255, 0.6)", 110);
           }
           t.loadingBarTimer -= dt;
           if (t.loadingBarTimer <= 0) {
             if (t.phase === 2) {
               spawnTantalumSweepBeam(Math.random() > 0.5 ? "left" : "right", height * 0.5 + (Math.random() - 0.5) * 36);
-            } else {
-              const y = height * 0.5 + (Math.random() - 0.5) * 52;
-              spawnTantalumSweepBeam("left", y);
-              spawnTantalumSweepBeam("right", y);
             }
             t.loadingBarTimer = 4;
           }
@@ -8972,7 +9016,7 @@
           packet.life -= dt;
           if (packet.kind === "plate_wall") {
             packet.x += packet.vx * dt;
-            packet.y += packet.vy * dt;
+            packet.y = packet.baseY + Math.sin(packet.age * packet.wobbleFreq + packet.wobblePhase) * packet.wobbleAmp;
             const angle = packet.angle;
             const cos = Math.cos(angle);
             const sin = Math.sin(angle);
@@ -8986,7 +9030,7 @@
               damagePlayer(1, "impact");
               continue;
             }
-            if (packet.life <= 0 || packet.x < -180 || packet.x > width + 180 || packet.y < -180 || packet.y > height + 180) {
+            if (packet.life <= 0 || packet.x < -280 || packet.x > width + 280 || packet.y < -220 || packet.y > height + 220) {
               t.packets.splice(i, 1);
             }
             continue;
@@ -9241,12 +9285,13 @@
           height: 58,
           side,
           life: 12,
+          damage: 1,
           spin: (Math.random() - 0.5) * 0.8,
           angle: 0
         });
       }
 
-      function spawnLuminosityDetachedElectrons() {
+      function spawnLuminosityDetachedElectrons(countOverride = null) {
         const l = state.luminosity;
         const source = l.phase === 3
           ? shuffleArray(l.freeElectrons.map((electron, index) => ({
@@ -9265,7 +9310,8 @@
               anchorMode: "ring",
               anchorIndex: electron.index
             })));
-        const picks = source.slice(0, 2);
+        const targetCount = countOverride ?? (l.phase === 3 ? 3 : 2);
+        const picks = source.slice(0, targetCount);
         for (const electron of picks) {
           l.detachedElectrons.push({
             x: electron.x,
@@ -9331,10 +9377,10 @@
               }
             }
             if (l.detachedElectrons.length < 3) {
-              spawnLuminosityDetachedElectrons();
+              spawnLuminosityDetachedElectrons(3);
             }
             l.detachedElectrons = l.detachedElectrons.slice(0, 3);
-            l.detachTimer = 3.2;
+            l.detachTimer = 3 + Math.random() * 3;
             addFlash(l.x, l.y, "rgba(255, 160, 160, 0.58)", 190);
             addSpark(l.x, l.y, "rgba(255, 236, 236, 0.98)", 26, 220);
           }
@@ -9387,17 +9433,22 @@
           let moveTargetX = homeX;
           let moveTargetY = homeY;
           if (l.phase === 3) {
-            const roamCenterX = centerX + Math.sin(state.elapsed * 0.22) * width * 0.08;
-            const roamCenterY = height * 0.27 + Math.cos(state.elapsed * 0.18) * 18;
-            moveTargetX = roamCenterX + Math.sin(state.elapsed * 0.58 + 0.8) * width * 0.16 + Math.cos(state.elapsed * 0.31) * 36;
-            moveTargetY = roamCenterY + Math.cos(state.elapsed * 0.44 + 0.35) * 34 + Math.sin(state.elapsed * 0.27) * 14;
+            l.wanderTimer = (l.wanderTimer + dt * 0.82) % TAU;
+            const orbitRadiusX = Math.min(190, width * 0.18);
+            const orbitRadiusY = Math.min(102, height * 0.15);
+            moveTargetX = centerX
+              + Math.cos(l.wanderTimer) * orbitRadiusX
+              + Math.sin(l.wanderTimer * 2.1) * 34;
+            moveTargetY = height * 0.29
+              + Math.sin(l.wanderTimer * 1.08) * orbitRadiusY
+              + Math.cos(l.wanderTimer * 1.86) * 16;
           }
-          const easeX = Math.min(1, dt * (l.phase === 3 ? 1.95 : 3.05));
-          const easeY = Math.min(1, dt * (l.phase === 3 ? 1.8 : 2.7));
-          l.vx *= Math.max(0, 1 - dt * (l.phase === 3 ? 3.8 : 5.2));
-          l.vy *= Math.max(0, 1 - dt * (l.phase === 3 ? 3.9 : 5.4));
-          l.x += (moveTargetX - l.x) * easeX + l.vx * dt * (l.phase === 3 ? 0.12 : 0.22);
-          l.y += (moveTargetY - l.y) * easeY + l.vy * dt * (l.phase === 3 ? 0.12 : 0.22);
+          const easeX = Math.min(1, dt * (l.phase === 3 ? 2.8 : 3.05));
+          const easeY = Math.min(1, dt * (l.phase === 3 ? 2.55 : 2.7));
+          l.vx *= Math.max(0, 1 - dt * (l.phase === 3 ? 4.8 : 5.2));
+          l.vy *= Math.max(0, 1 - dt * (l.phase === 3 ? 4.8 : 5.4));
+          l.x += (moveTargetX - l.x) * easeX + l.vx * dt * (l.phase === 3 ? 0.08 : 0.22);
+          l.y += (moveTargetY - l.y) * easeY + l.vy * dt * (l.phase === 3 ? 0.08 : 0.22);
         }
         l.x = clamp(l.x, minX, maxX);
         const maxY = l.phase === 3 ? roamMaxY : l.dashActive > 0 ? height - 30 : roamMaxY;
@@ -9439,9 +9490,10 @@
 
         if (l.phase >= 2) {
           l.detachTimer -= dt;
-          if (l.detachTimer <= 0 && l.detachedElectrons.length < 2) {
-            spawnLuminosityDetachedElectrons();
-            l.detachTimer = l.phase === 3 ? 0.9 + Math.random() * 1.15 : 1 + Math.random() * 2;
+          const detachedCap = l.phase === 3 ? 3 : 2;
+          if (l.detachTimer <= 0 && l.detachedElectrons.length < detachedCap) {
+            spawnLuminosityDetachedElectrons(detachedCap);
+            l.detachTimer = l.phase === 3 ? 3 + Math.random() * 3 : 1 + Math.random() * 2;
           }
         }
 
@@ -9572,7 +9624,7 @@
           nearest = Math.min(nearest, dist);
           if (dist < 150) closeCount++;
           if (Math.abs(player.x - barrier.x) < barrier.width * 0.5 + player.hitRadius && Math.abs(player.y - barrier.y) < barrier.height * 0.5 + player.hitRadius) {
-            damagePlayer(1, "impact");
+            damagePlayer(barrier.damage ?? 1, "impact");
           }
           if (barrier.life <= 0 || barrier.x < -barrier.width - 120 || barrier.x > width + barrier.width + 120) l.barriers.splice(i, 1);
         }
@@ -10123,15 +10175,17 @@
         const length = Math.hypot(dx, dy) || 1;
         const dirX = dx / length;
         const dirY = dy / length;
+        const shotSpeed = pointer.shotSpeed || 760;
+        const arenaSpan = Math.hypot(width + 160, height + 160);
         state.caesar.pointerShots.push({
           x: pointer.x1,
           y: pointer.y1,
-          vx: dirX * (pointer.shotSpeed || 760),
-          vy: dirY * (pointer.shotSpeed || 760),
+          vx: dirX * shotSpeed,
+          vy: dirY * shotSpeed,
           width: 32,
           height: 14,
           rotation: Math.atan2(dirY, dirX),
-          life: 2.2
+          life: arenaSpan / shotSpeed + 0.45
         });
       }
 
@@ -12517,11 +12571,12 @@
       }
 
       function updatePlayerShots(dt) {
-        const bossTarget = getBossTargetState();
-        const bossPos = bossTarget.pos;
-        const bossHitRadius = bossTarget.radius;
         for (let i = state.playerShots.length - 1; i >= 0; i--) {
           const shot = state.playerShots[i];
+          shot.siliBusPassTimer = Math.max(0, (shot.siliBusPassTimer || 0) - dt);
+          const bossTarget = getBossTargetState(shot.x, shot.y);
+          const bossPos = bossTarget.pos;
+          const bossHitRadius = bossTarget.radius;
           let tickTouching = false;
           const getShotSegment = () => {
             if (shot.type !== "focus_beam") {
@@ -12586,8 +12641,8 @@
           if (state.currentBoss === "cesium") {
             const shotPull = getCesiumMagnetPullAt(shot.x, shot.y, shot.size + 2);
             if (shotPull) {
-              shot.vx += shotPull.directionX * shotPull.pullAccel * dt * 0.82;
-              shot.vy += shotPull.directionY * shotPull.pullAccel * dt * 0.82;
+              shot.vx += shotPull.directionX * shotPull.pullAccel * dt * 1.42;
+              shot.vy += shotPull.directionY * shotPull.pullAccel * dt * 1.42;
               const shotSpeed = Math.hypot(shot.vx, shot.vy);
               const maxShotSpeed = 760;
               if (shotSpeed > maxShotSpeed) {
@@ -12623,6 +12678,22 @@
             if (clippedBarrier) continue;
           } else if (state.currentBoss === "sili") {
             const siliUnits = getSiliUnitStates();
+            let blockedByBus = false;
+            if (state.sili.phase === 3 && !shot.phasesHazards && shot.siliBusPassTimer <= 0) {
+              for (const bus of state.sili.busLines) {
+                if (Math.abs(shot.x - bus.x) < bus.width * 0.5 + shot.size && Math.abs(shot.y - bus.y) < bus.height * 0.5 + shot.size) {
+                  if (Math.random() < 0.4) {
+                    shot.siliBusPassTimer = 0.16;
+                  } else {
+                    addSpark(shot.x, shot.y, "rgba(214, 196, 255, 0.92)", 6, 105);
+                    state.playerShots.splice(i, 1);
+                    blockedByBus = true;
+                  }
+                  break;
+                }
+              }
+            }
+            if (blockedByBus) continue;
             let hitSili = false;
             for (const unit of [siliUnits.unitA, siliUnits.unitB]) {
               const dist = shot.type === "focus_beam" ? getShotDistanceToPoint(unit.x, unit.y) : Math.hypot(shot.x - unit.x, shot.y - unit.y);
@@ -12789,7 +12860,7 @@
                 vy: shot.vy * 0.8,
                 size: 6,
                 damage: shot.damage,
-                life: 10
+                life: 16.6
               });
               addSpark(shot.x, shot.y, "rgba(255, 170, 90, 0.96)", 8, 120);
               state.playerShots.splice(i, 1);
@@ -12804,7 +12875,7 @@
                   vy: shot.vy * 0.8,
                   size: 6,
                   damage: shot.damage,
-                  life: 10
+                  life: 16.6
                 });
                 addSpark(shot.x, shot.y, "rgba(255, 170, 90, 0.96)", 8, 120);
                 state.playerShots.splice(i, 1);
@@ -12921,11 +12992,11 @@
       }
 
       function updateXlMissiles(dt) {
-        const bossTarget = getBossTargetState();
-        const bossPos = bossTarget.pos;
-        const bossHitRadius = bossTarget.radius;
         for (let i = state.xlMissiles.length - 1; i >= 0; i--) {
           const missile = state.xlMissiles[i];
+          const bossTarget = getBossTargetState(missile.x, missile.y);
+          const bossPos = bossTarget.pos;
+          const bossHitRadius = bossTarget.radius;
           const toBossX = bossPos.x - missile.x;
           const toBossY = bossPos.y - missile.y;
           const distance = Math.hypot(toBossX, toBossY) || 1;
@@ -13021,7 +13092,7 @@
             burst.tickTimer -= dt;
           }
           if (state.mode === "playing" && state.bossHealth > 0 && burst.tickTimer <= 0) {
-            const bossTarget = getBossTargetState();
+            const bossTarget = getBossTargetState(burst.x, burst.y);
             const dist = Math.hypot(bossTarget.pos.x - burst.x, bossTarget.pos.y - burst.y);
             if (dist < bossTarget.radius + burst.radius) {
               damageBoss(burst.damage, { source: "bullet" });
