@@ -2495,7 +2495,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           : bossKey === "radiator"
           ? "Radiator the Ultimate Decayer"
           : bossKey === "decayer"
-          ? "The Guardian Dancing in Despair"
+          ? "The Guardian of Eden"
           : "Hertz's Harmony";
       const bosses = [
         {
@@ -2577,7 +2577,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           teaser: "Another cool name in my opinion. 92U-XIII has a cool name but in turn it does not look good, but how is CDI supposed to control the looks of MAVENs? I mean they didn’t mean for them to look like this."
         },
         {
-          name: "The Guardian Dancing in Despair",
+          name: "The Guardian of Eden",
           active: true,
           status: "ACTIVE",
           teaser: "The final containment failure. A colossal despair-drenched core wrapped in glitching white filaments, orange geometry, and a smaller Ytterbium-born predator waiting inside it."
@@ -2805,7 +2805,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         bleach_down: { title: "Baron Neutralized", desc: "Defeat The Bleach Baron." },
         alarmist_down: { title: "Alarm Silenced", desc: "Defeat Ambitious Alarmist-Am." },
         slabhraidh_down: { title: "Bars Broken", desc: "Defeat Stalwart Slabhraidh." },
-        decayer_down: { title: "Dance Ended", desc: "Defeat The Guardian Dancing in Despair." },
+        decayer_down: { title: "Dance Ended", desc: "Defeat The Guardian of Eden." },
         arsenal_tuned: { title: "Arsenal Tuned", desc: "Purchase your first shop upgrade." },
         score_2500: { title: "Signal Ascendant", desc: "Reach a score of 2500." },
         score_5000: { title: "Signal Unbroken", desc: "Reach a score of 5000." },
@@ -11348,7 +11348,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           } else if (state.currentBoss === "decayer") {
             warningText.textContent =
               state.cutsceneTime > 1.65
-                ? "Containment 14 Fracturing... The Guardian Dancing In Despair Unfolding A Final Lament."
+              ? "Containment 14 Fracturing... The Guardian Of Eden Unfolding A Final Lament."
                 : "Filaments Hissing White Through A Neon Orange Mechanical Halo...";
           } else {
             warningText.textContent =
@@ -11399,7 +11399,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         }
         overlay.innerHTML = `
           <div class="warning-shell">
-            <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : state.currentBoss === "alarmist" ? "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent." : state.currentBoss === "slabhraidh" ? "Stalwart Slabhraidh Seizing Up. Guide Bars Tearing Loose." : state.currentBoss === "radiator" ? "Radiator Cooling To Grey. Critical Decay Chain Finally Breaking." : "The Guardian Dancing In Despair Is Tearing Apart. Ytterbium Light Is Breaking Loose."}</div>
+      <div class="warning-text" id="victoryText">${state.currentBoss === "architect" ? "Hertz's Harmony Disassembled. Neural Corridor Stabilizing." : state.currentBoss === "sovereign" ? "Protium Sovereign Destabilized. Fission Cascade Imminent." : state.currentBoss === "monarch" ? "Monarch Null Shattering Across The Lattice." : state.currentBoss === "cesium" ? "Cesium Fracturing Into Hazardous Debris." : state.currentBoss === "tantalum" ? "Tantalum Overloading. Charge Integrity Failing." : state.currentBoss === "luminosity" ? "Lord Luminosity Dimming. Noble Neon Structure Failing." : state.currentBoss === "sili" ? "Sili Overclock Destabilizing. Binary Merge Failure Imminent." : state.currentBoss === "caesar" ? "Caesar Dy Overheating. Rail Polarity Failure Imminent." : state.currentBoss === "beauty" ? "Beauty Bismuth Dulling. Hopper Crystal Collapse Imminent." : state.currentBoss === "bleach" ? "The Bleach Baron Liquefying. Corrosive Bond Failure Imminent." : state.currentBoss === "alarmist" ? "Ambitious Alarmist-Am Burning Out. Shutters Falling Silent." : state.currentBoss === "slabhraidh" ? "Stalwart Slabhraidh Seizing Up. Guide Bars Tearing Loose." : state.currentBoss === "radiator" ? "Radiator Cooling To Grey. Critical Decay Chain Finally Breaking." : "The Guardian Of Eden Is Tearing Apart. Ytterbium Light Is Breaking Loose."}</div>
           </div>
         `;
         overlay.classList.add("show");
@@ -11811,7 +11811,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               : state.victoryBoss === "radiator"
               ? "Radiator Going Grey. Core Collapse Imminent."
           : state.victoryBoss === "decayer"
-          ? "The Guardian Dancing In Despair Is Burning Out. Final Collapse Imminent."
+                ? "The Guardian Of Eden Is Burning Out. Final Collapse Imminent."
               : "Caesar Dy Cracking Silver. Magnetic Collapse Imminent.";
           }
           const fadeStart = 5.6;
