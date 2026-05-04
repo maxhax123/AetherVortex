@@ -3444,6 +3444,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           survivalTimer: 0,
           shockwaveTimer: 0,
           wallShockwaveCooldown: 0,
+          sideSlamTimer: 0,
+          sideSlamDuration: 0,
+          sideSlamWall: "left",
+          sideSlamImpactDone: false,
+          sideSlamY: 0,
           shockwaves: [],
           projectiles: [],
           toxicTrail: [],
@@ -3466,6 +3471,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           hitFxCooldown: 0,
           tripTimer: 0,
           pulseCooldown: 0,
+          phase2SweepChargeTimer: 0,
+          phase2SweepPending: false,
           ashTimer: 0,
           sweepTimer: 0,
           smokeTimer: 0,
@@ -6407,6 +6414,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           survivalTimer: 13,
           shockwaveTimer: 1.1,
           wallShockwaveCooldown: 0,
+          sideSlamTimer: 0,
+          sideSlamDuration: 0,
+          sideSlamWall: "left",
+          sideSlamImpactDone: false,
+          sideSlamY: height * 0.19,
           shockwaves: [],
           projectiles: [],
           toxicTrail: [],
@@ -6432,6 +6444,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           hitFxCooldown: 0,
           tripTimer: 0,
           pulseCooldown: 0,
+          phase2SweepChargeTimer: 0,
+          phase2SweepPending: false,
           ashTimer: 0.04,
           sweepTimer: 3.5,
           smokeTimer: 0.1,
@@ -10434,6 +10448,30 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           c.prismInvuln = c.prismTimer > 3 ? 1 : 0;
           if (c.prismInvuln) {
             if (!wasInvuln) {
+              const playerAngle = Math.atan2(player.y - c.y, player.x - c.x);
+              const lineDistance = (a, b) => {
+                const diff = Math.abs(((a - b + Math.PI) % TAU + TAU) % TAU - Math.PI);
+                return Math.min(diff, Math.abs(Math.PI - diff));
+              };
+              const beamCandidates = [
+                -Math.PI * 0.5 + 0.32,
+                -Math.PI * 0.28,
+                -Math.PI * 0.08,
+                Math.PI * 0.08,
+                Math.PI * 0.28,
+                Math.PI * 0.5 - 0.32
+              ];
+              let safestAngle = beamCandidates[0];
+              let safestDistance = -1;
+              for (const candidate of beamCandidates) {
+                const candidateDistance = lineDistance(playerAngle, candidate);
+                if (candidateDistance > safestDistance) {
+                  safestDistance = candidateDistance;
+                  safestAngle = candidate;
+                }
+              }
+              c.prismBeamAngle = safestAngle;
+              c.prismBeamDir = player.y >= c.y ? -1 : 1;
               addFlash(c.x, c.y, "rgba(170,255,188,0.22)", outerRadius * 1.6);
               for (let i = 0; i < 8; i++) {
                 const angle = (i / 8) * TAU;
@@ -12660,8 +12698,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           if (state.currentBoss === "cesium") {
             const shotPull = getCesiumMagnetPullAt(shot.x, shot.y, shot.size + 2);
             if (shotPull) {
-              shot.vx += shotPull.directionX * shotPull.pullAccel * dt * 1.42;
-              shot.vy += shotPull.directionY * shotPull.pullAccel * dt * 1.42;
+              shot.vx += shotPull.directionX * shotPull.pullAccel * dt * 4.26;
+              shot.vy += shotPull.directionY * shotPull.pullAccel * dt * 4.26;
               const shotSpeed = Math.hypot(shot.vx, shot.vy);
               const maxShotSpeed = 760;
               if (shotSpeed > maxShotSpeed) {
@@ -12766,8 +12804,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                   const pushDx = nucleus.x - player.x;
                   const pushDy = nucleus.y - player.y;
                   const pushDist = Math.hypot(pushDx, pushDy) || 1;
-                  state.bleach.vx += (pushDx / pushDist) * 24;
-                  state.bleach.vy += (pushDy / pushDist) * 24;
+                  state.bleach.vx += (pushDx / pushDist) * 40;
+                  state.bleach.vy += (pushDy / pushDist) * 40;
                   addFlash(nucleus.x, nucleus.y, "rgba(238,255,210,0.16)", 46);
                 }
                 if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") state.playerShots.splice(i, 1);
@@ -17547,19 +17585,48 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           b.driftTimer = 0.18;
         } else if (b.driftTimer <= 0) {
           b.driftTimer = b.phase >= 4 ? 0.75 + Math.random() * 0.8 : 1.1 + Math.random() * 1.1;
-          b.targetX = minX + Math.random() * Math.max(30, maxX - minX);
-          b.targetY = minY + Math.random() * Math.max(20, maxY - minY);
+          if (b.phase === 2 && Math.random() < 0.78) {
+            const favorLeft = Math.random() < 0.5;
+            b.targetX = favorLeft
+              ? minX + 16 + Math.random() * 58
+              : maxX - 16 - Math.random() * 58;
+            b.targetY = minY + Math.random() * Math.max(20, maxY - minY);
+          } else {
+            b.targetX = minX + Math.random() * Math.max(30, maxX - minX);
+            b.targetY = minY + Math.random() * Math.max(20, maxY - minY);
+          }
         }
-        const driftForce = b.phase === 3 ? 5.1 : b.phase === 2 ? 3.6 : b.phase >= 4 ? 2.3 : 3.4;
+        const driftForce = b.phase === 3 ? 5.1 : b.phase === 2 ? 4.9 : b.phase >= 4 ? 2.3 : 3.4;
         b.vx += (b.targetX - b.x) * dt * driftForce;
         b.vy += (b.targetY - b.y) * dt * driftForce;
         b.vx *= b.phase === 2 ? 0.995 : b.phase === 3 ? 0.97 : 0.94;
         b.vy *= b.phase === 2 ? 0.995 : b.phase === 3 ? 0.97 : 0.94;
+        if (b.phase === 2 && b.sideSlamTimer > 0) {
+          const sideSign = b.sideSlamWall === "left" ? 1 : -1;
+          const wallX = b.sideSlamWall === "left" ? minX : maxX;
+          const retreatX = wallX + sideSign * 138;
+          const slamProgress = 1 - b.sideSlamTimer / Math.max(0.001, b.sideSlamDuration);
+          const striking = slamProgress >= 0.34;
+          const desiredX = striking ? wallX : retreatX;
+          const desiredY = clamp(b.sideSlamY, minY, maxY);
+          b.vx += (desiredX - b.x) * dt * (striking ? 28 : 16);
+          b.vy += (desiredY - b.y) * dt * 8.5;
+          if (striking && !b.sideSlamImpactDone) {
+            b.sideSlamImpactDone = true;
+            state.shake = Math.max(state.shake, 20);
+            addFlash(wallX, desiredY, "rgba(240,255,214,0.26)", 104);
+            if (b.wallShockwaveCooldown <= 0) {
+              b.wallShockwaveCooldown = 0.36;
+              spawnBleachRandomShockwave();
+            }
+          }
+          b.sideSlamTimer = Math.max(0, b.sideSlamTimer - dt);
+        }
         if (b.phase === 5) {
           b.vx *= 0.84;
           b.vy *= 0.84;
         }
-        const speedCap = b.phase === 3 ? 365 : b.phase === 2 ? 290 : b.phase >= 4 ? 250 : 220;
+        const speedCap = b.phase === 3 ? 365 : b.phase === 2 ? 380 : b.phase >= 4 ? 250 : 220;
         const speed = Math.hypot(b.vx, b.vy);
         if (speed > speedCap) {
           const scale = speedCap / speed;
@@ -17615,8 +17682,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               b.vx *= -1;
               b.x = clamp(b.x, minX, maxX);
               b.y = clamp(b.y, minY, maxY);
-              state.shake = Math.max(state.shake, 12);
+              state.shake = Math.max(state.shake, 18);
               addFlash(nucleus.x, nucleus.y, "rgba(240,255,214,0.18)", 70);
+              b.sideSlamTimer = 0.52;
+              b.sideSlamDuration = 0.52;
+              b.sideSlamWall = nucleus.x < nucleus.radius ? "left" : "right";
+              b.sideSlamImpactDone = false;
+              b.sideSlamY = nucleus.y;
               if (b.wallShockwaveCooldown <= 0) {
                 b.wallShockwaveCooldown = 0.42;
                 spawnBleachRandomShockwave();
@@ -17626,7 +17698,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               b.vy *= -1;
               b.x = clamp(b.x, minX, maxX);
               b.y = clamp(b.y, minY, maxY);
-              state.shake = Math.max(state.shake, 12);
               addFlash(nucleus.x, nucleus.y, "rgba(240,255,214,0.12)", 56);
             }
           }
@@ -17724,10 +17795,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           if (trail.life <= 0) b.toxicTrail.splice(i, 1);
         }
 
-        if (b.phase === 4 && player.y > height - 88) {
-          damagePlayer(0.5, "corrosion");
-          nearest = Math.min(nearest, Math.abs(height - 88 - player.y));
-        }
         if (b.phase >= 4) {
           const jetLength = Math.max(width, height) * 0.72;
           const jetX2 = b.x + Math.cos(b.jetAngle) * jetLength;
@@ -18047,10 +18114,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           }
           ctx.restore();
         }
-        if (b.phase === 4) {
-          ctx.fillStyle = "rgba(116,190,84,0.22)";
-          ctx.fillRect(0, height - 88, width, 88);
-        }
         if (b.phase >= 4) {
           const length = Math.max(width, height) * 0.72;
           ctx.save();
@@ -18160,7 +18223,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         const thickness = s.phase >= 4 ? 34 : 28;
         const detachedIndices = new Set((s.phase4DetachedBars || []).map((bar) => bar.index));
         for (let index = 0; index < 3; index++) {
-          if (s.phase === 3 && index === s.snappedBarIndex) continue;
+          if ((s.phase === 3 || s.phase === 4) && index === s.snappedBarIndex) continue;
           if (s.phase === 4 && detachedIndices.has(index)) continue;
           bars.push(getSlabhraidhHomeBarState(index, length, thickness));
         }
@@ -19270,8 +19333,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         r.phaseAccentTimer -= dt;
 
         if (r.phase <= 3 && r.bulletTimer <= 0) {
-          r.bulletTimer = r.phase === 3 ? 0.22 : 0.34;
-          spawnRadiatorGreenNeedles(r.phase === 3 ? 13 : 9, r.phase === 3 ? 382 : 338);
+          r.bulletTimer = r.phase === 3 ? 0.22 : 0.42;
+          spawnRadiatorGreenNeedles(r.phase === 3 ? 13 : 6, r.phase === 3 ? 382 : 320);
         }
         if (r.phase <= 3 && r.heavyTimer <= 0) {
           r.heavyTimer = r.phase === 3 ? 0.72 : 1.05;
@@ -19292,8 +19355,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             r.phaseAccentTimer = 1.55 + Math.random() * 1.1;
             spawnRadiatorNeedleFan(11, 285, 1.08, Math.PI);
           } else if (r.phase === 2) {
-            r.phaseAccentTimer = 1.9 + Math.random() * 1.2;
-            spawnRadiatorHeavyBurst(4);
+            r.phaseAccentTimer = 2.15 + Math.random() * 1.25;
+            spawnRadiatorHeavyBurst(2);
           } else if (r.phase === 3) {
             r.phaseAccentTimer = 1.4 + Math.random() * 0.9;
             spawnRadiatorNeedleFan(12, 300, 1.24, Math.PI * 0.5);
@@ -21712,6 +21775,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         return Math.abs(localX) <= blade.width * 0.5 + padding && Math.abs(localY) <= blade.height * 0.5 + padding;
       }
 
+      function alarmistBladeArcContainsPoint(blade, x, y, padding = 0) {
+        const dx = x - blade.x;
+        const dy = y - blade.y;
+        const cos = Math.cos(-blade.rotation);
+        const sin = Math.sin(-blade.rotation);
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+        const radius = Math.hypot(localX, localY);
+        const angle = Math.atan2(localY, localX);
+        const innerRadius = Math.max(0, blade.radius * 0.48 - padding);
+        const outerRadius = blade.radius + padding;
+        return radius >= innerRadius && radius <= outerRadius && Math.abs(angle) <= blade.arcSpan;
+      }
+
       function getAlarmistTripwires() {
         const a = state.alarmist;
         const wires = [];
@@ -21824,11 +21901,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         }
       }
 
-      function spawnAlarmWave() {
+      function spawnAlarmWave(originX = state.alarmist.x, originY = state.alarmist.y) {
         state.alarmist.projectiles.push({
           type: "alarm_wave",
-          x: state.alarmist.x,
-          y: state.alarmist.y,
+          x: originX,
+          y: originY,
           radius: 24,
           speed: 260,
           width: 16,
@@ -21913,6 +21990,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         a.redFlashTimer = Math.max(0, a.redFlashTimer - dt);
         a.freezeTimer = Math.max(0, a.freezeTimer - dt);
         a.burstSpeedTimer = Math.max(0, a.burstSpeedTimer - dt);
+        a.phase2SweepChargeTimer = Math.max(0, a.phase2SweepChargeTimer - dt);
 
         const desiredBladeSpread = a.phase === 2 ? 1.12 : a.phase >= 4 ? 0.9 : 1;
         a.bladeSpread += (desiredBladeSpread - a.bladeSpread) * Math.min(1, dt * 3.4);
@@ -21955,6 +22033,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           a.orbitAnchorX = a.x;
           a.orbitAnchorY = a.y;
         }
+        if (a.phase !== 2) {
+          a.phase2SweepPending = false;
+          a.phase2SweepChargeTimer = 0;
+        }
 
         if (a.phase === 1) {
           a.tripTimer -= dt;
@@ -21986,8 +22068,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           a.sweepTimer -= dt;
           a.smokeTimer -= dt;
           a.ashTimer -= dt;
-          if (a.sweepTimer <= 0) {
+          if (!a.phase2SweepPending && a.sweepTimer <= 0) {
             a.sweepTimer = 3.1 + Math.random() * 1.8;
+            a.phase2SweepPending = true;
+            a.phase2SweepChargeTimer = 0.5;
+          }
+          if (a.phase2SweepPending && a.phase2SweepChargeTimer <= 0) {
+            a.phase2SweepPending = false;
             for (const blade of getAlarmistBladeStates()) spawnAlarmSweepCone(blade);
           }
           if (a.smokeTimer <= 0) {
@@ -22089,7 +22176,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             if (a.phase5ShockwaveBurstsLeft > 0 && a.phase5ShockwaveTimer <= 0) {
               a.phase5ShockwaveTimer = 0.34;
               a.phase5ShockwaveBurstsLeft -= 1;
-              spawnAlarmWave();
+              spawnAlarmWave(centerX, height + 24);
               state.shake = Math.max(state.shake, 20);
             }
             if (a.phase5ShockwaveBurstsLeft <= 0) {
@@ -22135,7 +22222,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         for (const blade of getAlarmistBladeStates()) {
           const dist = Math.hypot(player.x - blade.x, player.y - blade.y);
           nearest = Math.min(nearest, dist);
-          if (alarmistBladeContainsPoint(blade, player.x, player.y, player.hitRadius)) damagePlayer(0.5, "impact");
+          const bladeHit = a.phase === 2
+            ? alarmistBladeArcContainsPoint(blade, player.x, player.y, player.hitRadius)
+            : alarmistBladeContainsPoint(blade, player.x, player.y, player.hitRadius);
+          if (bladeHit) damagePlayer(0.5, "impact");
         }
         for (const blade of a.floorBlades) {
           const dist = Math.hypot(player.x - blade.x, player.y - blade.y);
@@ -22287,6 +22377,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           ctx.save();
           ctx.translate(blade.x, blade.y);
           ctx.rotate(blade.rotation);
+          const sweepCharge = a.phase === 2 && a.phase2SweepPending ? clamp(a.phase2SweepChargeTimer / 0.5, 0, 1) : 0;
+          const chargeGlow = a.phase === 2 ? 1 - sweepCharge : 0;
           const bladeGrad = ctx.createLinearGradient(-blade.width * 0.55, 0, blade.width * 0.55, 0);
           bladeGrad.addColorStop(0, a.phase >= 4 ? "rgba(58,58,62,0.98)" : "rgba(74,74,80,0.96)");
           bladeGrad.addColorStop(0.45, a.phase >= 4 ? "rgba(132,132,140,0.92)" : "rgba(110,110,118,0.88)");
@@ -22300,7 +22392,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           ctx.strokeStyle = `rgba(184,184,194,${0.2 + phaseGlow * 0.18})`;
           ctx.lineWidth = 2.2;
           ctx.stroke();
-          ctx.strokeStyle = `rgba(255, 176, 92, ${0.16 + phaseGlow * 0.18 + hitPulse * 0.18})`;
+          ctx.strokeStyle = a.phase === 2 && a.phase2SweepPending
+            ? `rgba(255, ${96 + chargeGlow * 48}, ${84 + chargeGlow * 36}, ${0.24 + chargeGlow * 0.42})`
+            : `rgba(255, 176, 92, ${0.16 + phaseGlow * 0.18 + hitPulse * 0.18})`;
           ctx.lineWidth = 1.4;
           ctx.beginPath();
           ctx.arc(0, 0, blade.radius * 0.82, -blade.arcSpan * 0.94, blade.arcSpan * 0.94);
@@ -22308,7 +22402,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           if (a.phase >= 2) {
             for (let vent = 0; vent < 4; vent++) {
               const x = -42 + vent * 28;
-              ctx.fillStyle = `rgba(255, 204, 132, ${0.14 + phaseGlow * 0.1})`;
+              ctx.fillStyle = a.phase === 2 && a.phase2SweepPending
+                ? `rgba(255, ${72 + chargeGlow * 36}, ${72 + chargeGlow * 30}, ${0.2 + chargeGlow * 0.6})`
+                : `rgba(255, 204, 132, ${0.14 + phaseGlow * 0.1})`;
               ctx.fillRect(x - 2.5, -6, 5, 12);
             }
           }
