@@ -2759,6 +2759,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           priceCents: 4499,
           type: "traveler"
         },
+        magma_plasma: {
+          name: "Magma-plasma",
+          desc: "Randomized molten circles that drift outward in gliding arcs. They hit for 0.75x upfront, then stick briefly and tick extra damage into the boss.",
+          priceCents: 9699,
+          type: "magma_plasma"
+        },
         sniper: {
           name: "Sniper",
           desc: "One ultra-fast long-range spike every 0.6 seconds. It hits for 3.6x normal bullet damage and crosses the full arena.",
@@ -3024,6 +3030,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             orbital_strike: Boolean(source.shop?.ownedPrimaryBullets?.orbital_strike),
             focus_beam: Boolean(source.shop?.ownedPrimaryBullets?.focus_beam),
             traveler: Boolean(source.shop?.ownedPrimaryBullets?.traveler),
+            magma_plasma: Boolean(source.shop?.ownedPrimaryBullets?.magma_plasma),
             sniper: Boolean(source.shop?.ownedPrimaryBullets?.sniper)
           },
           ownedSupportManagement: {
@@ -7729,6 +7736,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           tickTimer: 0.1,
           tickInterval: 0.1,
           hasInitialImpact: false,
+          stuck: false,
+          stickTimer: 0,
+          stickDuration: 0,
+          stickOffsetX: 0,
+          stickOffsetY: 0,
+          stickToBossCenter: false,
           ...extras
         });
       }
@@ -12447,6 +12460,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               rotation: angle,
               rotationSpeed: 0
             });
+          } else if (primaryMeta.type === "magma_plasma") {
+            const spreadAngle = angle + (Math.random() - 0.5) * 0.55;
+            const plasmaSpeed = 185 + Math.random() * 58;
+            const plasmaSize = Math.max(3.2, baseSize * (0.82 + Math.random() * 0.95));
+            createPlayerShot(muzzleX, muzzleY, spreadAngle, plasmaSpeed, Math.max(3.1, shotLife * 2.8), plasmaSize, shotDamage * 0.75, {
+              type: "magma_plasma",
+              initialDamage: shotDamage * 0.75,
+              tickDamage: shotDamage * 0.25,
+              tickTimer: 0.05,
+              tickInterval: 0.05,
+              stickDuration: 0.15,
+              immuneEnvironmental: bruteforceActive || macroActive || rootActive,
+              rotation: spreadAngle,
+              rotationSpeed: (Math.random() - 0.5) * 2.2,
+              plasmaHue: Math.random(),
+              plasmaDrift: Math.random() * TAU,
+              glideDrag: 0.26 + Math.random() * 0.08
+            });
           } else if (primaryMeta.type === "sniper") {
             createPlayerShot(muzzleX, muzzleY, angle, 1220, 1.75, Math.max(4.6, baseSize * 1.18), shotDamage * 3.6, {
               type: "sniper",
@@ -12658,6 +12689,30 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             const segment = getShotSegment();
             return distanceToSegment(px, py, segment.ax, segment.ay, segment.bx, segment.by);
           };
+          if (shot.type === "magma_plasma") {
+            if (shot.stuck && shot.stickTimer > 0) {
+              shot.stickTimer -= dt;
+              shot.tickTimer -= dt;
+              shot.x = bossPos.x + shot.stickOffsetX;
+              shot.y = bossPos.y + shot.stickOffsetY;
+              shot.vx = 0;
+              shot.vy = 0;
+              shot.rotation += (shot.rotationSpeed || 0) * dt;
+              if (shot.tickTimer <= 0) {
+                damageBoss(shot.tickDamage, { source: "bullet" });
+                shot.tickTimer += shot.tickInterval;
+                addSpark(shot.x, shot.y, "rgba(255, 178, 122, 0.92)", 4, 78);
+              }
+              if (shot.stickTimer <= 0) {
+                state.playerShots.splice(i, 1);
+              }
+              continue;
+            }
+            shot.vy += 22 * dt;
+            shot.vx *= Math.max(0, 1 - dt * (shot.glideDrag || 0.3));
+            shot.vy *= Math.max(0, 1 - dt * ((shot.glideDrag || 0.3) * 0.36));
+            shot.rotation += (shot.rotationSpeed || 0) * dt;
+          }
           if (shot.type === "spark_targets") {
             const toBossX = bossPos.x - shot.x;
             const toBossY = bossPos.y - shot.y;
@@ -12693,6 +12748,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                 addSpark(shot.x, shot.y, sparkColor, 4, 84);
               }
             }
+            return true;
+          };
+          const applyMagmaPlasmaContact = (sparkColor, anchorX = bossPos.x, anchorY = bossPos.y) => {
+            if (shot.type !== "magma_plasma") return false;
+            damageBoss(shot.initialDamage, { source: "bullet" });
+            triggerSupportBulletImpact(shot, shot.x, shot.y);
+            addSpark(shot.x, shot.y, sparkColor, 6, 110);
+            shot.stuck = true;
+            shot.stickTimer = shot.stickDuration || 0.15;
+            shot.tickTimer = shot.tickInterval || 0.05;
+            shot.stickOffsetX = shot.x - anchorX;
+            shot.stickOffsetY = shot.y - anchorY;
+            shot.vx = 0;
+            shot.vy = 0;
             return true;
           };
           if (state.currentBoss === "cesium") {
@@ -12758,6 +12827,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                 const sparkColor = unit.color === "#5ce8ff" ? "rgba(170, 245, 255, 0.96)" : "rgba(255, 176, 246, 0.96)";
                 if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                   applyTickPhaserContact(sparkColor);
+                } else if (shot.type === "magma_plasma") {
+                  applyMagmaPlasmaContact(sparkColor, unit.x, unit.y);
                 } else {
                   damageBoss(shot.damage, { source: "bullet" });
                   triggerSupportBulletImpact(shot, shot.x, shot.y);
@@ -12795,6 +12866,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               if (nucleusDist < nucleus.radius + shot.size + 2) {
                 if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                   applyTickPhaserContact("rgba(238, 255, 224, 0.96)");
+                } else if (shot.type === "magma_plasma") {
+                  applyMagmaPlasmaContact("rgba(238, 255, 224, 0.96)", nucleus.x, nucleus.y);
                 } else {
                   damageBoss(shot.damage, { source: "bullet" });
                   triggerSupportBulletImpact(shot, shot.x, shot.y);
@@ -12819,10 +12892,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             for (const bar of getSlabhraidhBarStates()) {
               if (slabhraidhPointOnBar(bar, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(bar.x, bar.y) < bar.thickness * 0.6 + shot.size + 2)) {
                 if (shot.phasesHazards) continue;
-                damageBoss(0.5, { source: "bullet" });
-                triggerSupportBulletImpact(shot, shot.x, shot.y);
-                addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
-                state.playerShots.splice(i, 1);
+                if (shot.type === "magma_plasma") {
+                  applyMagmaPlasmaContact("rgba(255, 186, 112, 0.96)", bar.x, bar.y);
+                } else {
+                  damageBoss(0.5, { source: "bullet" });
+                  triggerSupportBulletImpact(shot, shot.x, shot.y);
+                  addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+                  state.playerShots.splice(i, 1);
+                }
                 hitSlabhraidh = true;
                 break;
               }
@@ -12831,10 +12908,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
               for (const det of state.slabhraidh.phase4DetachedBars) {
                 if (slabhraidhPointOnBar(det, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(det.x, det.y) < det.thickness * 0.6 + shot.size + 2)) {
                   if (shot.phasesHazards) continue;
-                  damageBoss(0.5, { source: "bullet" });
-                  triggerSupportBulletImpact(shot, shot.x, shot.y);
-                  addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
-                  state.playerShots.splice(i, 1);
+                  if (shot.type === "magma_plasma") {
+                    applyMagmaPlasmaContact("rgba(255, 186, 112, 0.96)", det.x, det.y);
+                  } else {
+                    damageBoss(0.5, { source: "bullet" });
+                    triggerSupportBulletImpact(shot, shot.x, shot.y);
+                    addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+                    state.playerShots.splice(i, 1);
+                  }
                   hitSlabhraidh = true;
                   break;
                 }
@@ -12842,10 +12923,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             }
             if (!hitSlabhraidh && state.slabhraidh.detachedBar && (slabhraidhPointOnBar(state.slabhraidh.detachedBar, shot.x, shot.y, shot.size + 2) || (shot.type === "focus_beam" && getShotDistanceToPoint(state.slabhraidh.detachedBar.x, state.slabhraidh.detachedBar.y) < state.slabhraidh.detachedBar.thickness * 0.6 + shot.size + 2))) {
               if (shot.phasesHazards) continue;
-              damageBoss(0.5, { source: "bullet" });
-              triggerSupportBulletImpact(shot, shot.x, shot.y);
-              addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
-              state.playerShots.splice(i, 1);
+              if (shot.type === "magma_plasma") {
+                applyMagmaPlasmaContact("rgba(255, 186, 112, 0.96)", state.slabhraidh.detachedBar.x, state.slabhraidh.detachedBar.y);
+              } else {
+                damageBoss(0.5, { source: "bullet" });
+                triggerSupportBulletImpact(shot, shot.x, shot.y);
+                addSpark(shot.x, shot.y, "rgba(255, 186, 112, 0.96)", 6, 120);
+                state.playerShots.splice(i, 1);
+              }
               hitSlabhraidh = true;
             }
             if (!hitSlabhraidh && (shot.type === "focus_beam" ? getShotDistanceToPoint(state.slabhraidh.x, state.slabhraidh.y) : Math.hypot(shot.x - state.slabhraidh.x, shot.y - state.slabhraidh.y)) < getSlabhraidhCoreRadius() + shot.size + 2) {
@@ -12997,6 +13082,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             if (coreDist < coreHitRadius) {
               if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                 applyTickPhaserContact("rgba(255, 220, 184, 0.9)");
+              } else if (shot.type === "magma_plasma") {
+                applyMagmaPlasmaContact("rgba(255, 220, 184, 0.9)", state.alarmist.x, state.alarmist.y);
               } else {
                 damageBoss(shot.damage, { source: "bullet" });
                 triggerSupportBulletImpact(shot, shot.x, shot.y);
@@ -13005,7 +13092,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                 addSpark(shot.x, shot.y, "rgba(255, 220, 184, 0.9)", 4, 96);
                 state.alarmist.hitFxCooldown = 0.05;
               }
-              if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") state.playerShots.splice(i, 1);
+              if (shot.type !== "tick_phaser" && shot.type !== "focus_beam" && shot.type !== "magma_plasma") state.playerShots.splice(i, 1);
               if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") continue;
             }
           }
@@ -13025,14 +13112,18 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             } else {
               if (shot.type === "tick_phaser" || shot.type === "focus_beam") {
                 applyTickPhaserContact("rgba(255, 215, 106, 0.95)");
+              } else if (shot.type === "magma_plasma") {
+                applyMagmaPlasmaContact("rgba(255, 215, 106, 0.95)", bossPos.x, bossPos.y);
               } else {
                 damageBoss(shot.damage, { source: "bullet" });
                 triggerSupportBulletImpact(shot, shot.x, shot.y);
               }
             }
-            if (shot.type !== "tick_phaser" && shot.type !== "focus_beam") {
+            if (shot.type !== "tick_phaser" && shot.type !== "focus_beam" && shot.type !== "magma_plasma") {
               addSpark(shot.x, shot.y, "rgba(255, 215, 106, 0.95)", 4, 90);
               state.playerShots.splice(i, 1);
+              continue;
+            } else if (shot.type === "magma_plasma") {
               continue;
             }
           }
@@ -16149,6 +16240,32 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             ctx.fillStyle = hexToRgba("#ffffff", alpha * 0.85);
             ctx.fillRect(-length * 0.55, -Math.max(1.2, shot.size * 0.12), length * 1.2, Math.max(2.1, shot.size * 0.24));
             ctx.restore();
+          } else if (shot.type === "magma_plasma") {
+            const magmaOuter = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 5.8);
+            magmaOuter.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.92})`);
+            magmaOuter.addColorStop(0.2, `rgba(255, 244, 186, ${alpha * 0.86})`);
+            magmaOuter.addColorStop(0.48, `rgba(255, 154, 86, ${alpha * 0.8})`);
+            magmaOuter.addColorStop(0.78, `rgba(255, 96, 54, ${alpha * 0.52})`);
+            magmaOuter.addColorStop(1, "rgba(255, 84, 42, 0)");
+            ctx.fillStyle = magmaOuter;
+            ctx.beginPath();
+            ctx.arc(shot.x, shot.y, shot.size * 5.8, 0, TAU);
+            ctx.fill();
+
+            const wobbleX = Math.cos(state.elapsed * 8 + (shot.plasmaDrift || 0)) * shot.size * 0.12;
+            const wobbleY = Math.sin(state.elapsed * 10 + (shot.plasmaDrift || 0)) * shot.size * 0.12;
+            ctx.fillStyle = `rgba(255, 122, 64, ${0.86 * alpha})`;
+            ctx.beginPath();
+            ctx.arc(shot.x + wobbleX, shot.y + wobbleY, shot.size * 1.08, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255, 224, 148, ${0.74 * alpha})`;
+            ctx.beginPath();
+            ctx.arc(shot.x - wobbleX * 0.8, shot.y - wobbleY * 0.8, shot.size * 0.58, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255, 248, 220, ${0.48 * alpha})`;
+            ctx.beginPath();
+            ctx.arc(shot.x + wobbleX * 0.4, shot.y - wobbleY * 0.4, shot.size * 0.22, 0, TAU);
+            ctx.fill();
           } else if (shot.type === "sniper") {
             const angle = Math.atan2(shot.vy, shot.vx);
             const glow = ctx.createRadialGradient(shot.x, shot.y, 0, shot.x, shot.y, shot.size * 8.4);
