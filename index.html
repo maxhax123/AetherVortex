@@ -2869,9 +2869,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       };
 
       const evolutionTierPrices = {
+        4: 3999,
         5: 5999,
         6: 7999,
         7: 9999
+      };
+
+      const inFightEvolutionCosts = {
+        2: 1400,
+        3: 2000,
+        4: 2500,
+        5: 4000,
+        6: 4500,
+        7: 6000
       };
 
       const defaultControlBindings = {
@@ -3049,8 +3059,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             ? source.shop.selectedSupportManagement
             : null,
           maxEvolutionTier: Number.isFinite(source.shop?.maxEvolutionTier)
-            ? clamp(Math.round(source.shop.maxEvolutionTier), 4, 7)
-            : 4
+            ? clamp(Math.round(source.shop.maxEvolutionTier), 3, 7)
+            : 3
         };
         const selectedLoadout = shop.ownedUltimates[source.attackLoadout] ? source.attackLoadout : "graphic_reset";
         const challengesSource = source.challenges || {};
@@ -3231,6 +3241,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           y: 0,
           phase: 1,
           orbitAngle: 0,
+          targetX: 0,
+          targetY: 0,
+          wanderTimer: 0,
+          followPauseTimer: 0,
           branchTimer: 0,
           monolithTimer: 0,
           beamTimer: 0,
@@ -3655,7 +3669,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         damageUpgradeLevel: 0,
         damageMultiplier: 1,
         healthBufferBuys: 0,
-        hitboxTrimBuys: 0
+        hitboxTrimBuys: 0,
+        manualEvolutionTier: 1
       };
 
       let startupRecoveryUsed = false;
@@ -4677,7 +4692,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       function getMaxEvolutionTier() {
         if (challengeDisablesEvolutions()) return 1;
-        return clamp(state.profile.shop?.maxEvolutionTier || 4, 4, 7);
+        return clamp(state.profile.shop?.maxEvolutionTier || 3, 3, 7);
       }
 
       function spendOperationsFunds(costCents) {
@@ -6025,8 +6040,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             </article>
           `;
         }).join("");
-        const evolutionMarkup = Array.from({ length: 4 }, (_, index) => {
-          const tier = index + 4;
+        const evolutionMarkup = Array.from({ length: 5 }, (_, index) => {
+          const tier = index + 3;
           const owned = tier <= getMaxEvolutionTier();
           const nextTier = getMaxEvolutionTier() + 1;
           const canBuy = tier === nextTier && tier <= 7;
@@ -6034,7 +6049,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           const priceLabel = price ? formatMoney(price) : "Included";
           return `
             <article class="config-card">
-              <div class="title">${tier <= 4 ? "Base Evolution" : canBuy ? "Next Upgrade" : owned ? "Owned Upgrade" : "Locked Upgrade"}</div>
+              <div class="title">${tier <= 3 ? "Base Evolution" : canBuy ? "Next Upgrade" : owned ? "Owned Upgrade" : "Locked Upgrade"}</div>
               <div class="value" style="font-size: 22px;">Evolution ${roman[tier - 1]}</div>
               <p class="boss-card-copy" style="margin: 14px 0 18px;">Unlocks a higher in-battle plane evolution ceiling. Boss damage dealt now drives your evolution climb during fights.</p>
               <div class="config-actions">
@@ -6043,7 +6058,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
                   ? `<button class="menu-button menu-hoverable" data-shop-buy-evolution="${tier}" ${funds < price ? "disabled" : ""}>Buy ${priceLabel}</button>`
                   : `<button class="menu-button" disabled>${owned ? "Unlocked" : "Buy Previous Tier"}</button>`}
               </div>
-              <div class="menu-footer" style="text-align:left; margin-top:10px;">${tier <= 4 ? "Available from the start." : `Price ${priceLabel}.`}</div>
+              <div class="menu-footer" style="text-align:left; margin-top:10px;">${tier <= 3 ? "Available from the start." : `Price ${priceLabel}.`}</div>
             </article>
           `;
         }).join("");
@@ -6168,7 +6183,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           y: height * 0.24,
           phase: 1,
           orbitAngle: 0,
-          branchTimer: 0.45,
+          targetX: centerX,
+          targetY: height * 0.24,
+          wanderTimer: 1.2,
+          followPauseTimer: 2.4,
+          branchTimer: 6.8,
           monolithTimer: 1.1,
           beamTimer: 0.9,
           branches: [],
@@ -6755,6 +6774,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         player.damageMultiplier = 1;
         player.healthBufferBuys = 0;
         player.hitboxTrimBuys = 0;
+        player.manualEvolutionTier = 1;
         player.maxHealth = getActiveChallengeId() === "please_do_not_attempt" ? 1 : player.baseMaxHealth;
         player.health = player.maxHealth;
         refreshPlayerHitRadius();
@@ -6861,6 +6881,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         state.score -= cost;
         player.hitboxTrimBuys += 1;
         refreshPlayerHitRadius();
+        awardAchievement("arsenal_tuned");
+        renderPauseOverlay();
+      }
+
+      function buyEvolutionUpgrade(tier) {
+        const cost = inFightEvolutionCosts[tier];
+        const maxTier = getMaxEvolutionTier();
+        const currentTier = Math.max(player.evolutionLevel, player.manualEvolutionTier);
+        if (
+          state.mode !== "paused" ||
+          !cost ||
+          challengeBlocksInFightPurchases() ||
+          challengeDisablesEvolutions() ||
+          tier > maxTier ||
+          tier !== currentTier + 1 ||
+          state.score < cost
+        ) {
+          return;
+        }
+        state.score -= cost;
+        player.manualEvolutionTier = tier;
+        player.evolutionLevel = Math.max(player.evolutionLevel, player.manualEvolutionTier);
         awardAchievement("arsenal_tuned");
         renderPauseOverlay();
       }
@@ -6974,6 +7016,23 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       function renderPauseOverlay() {
         clearDeathOverlayState();
         const phaseCount = getCurrentBossPhaseCount();
+        const maxTier = getMaxEvolutionTier();
+        const currentTier = Math.max(player.evolutionLevel, player.manualEvolutionTier);
+        const evolutionBuyMarkup = challengeDisablesEvolutions()
+          ? `<div class="menu-footer" style="text-align:left;">Evolutions are disabled by the current challenge.</div>`
+          : Array.from({ length: Math.max(0, maxTier - 1) }, (_, index) => {
+              const tier = index + 2;
+              const cost = inFightEvolutionCosts[tier];
+              const owned = player.evolutionLevel >= tier || player.manualEvolutionTier >= tier;
+              const canBuy = tier === currentTier + 1 && !owned && !challengeBlocksInFightPurchases();
+              return `
+                <div class="shop-item" style="margin-bottom:10px;">
+                  <strong>Evolution ${roman[tier - 1]}</strong>
+                  <span>${owned ? "Reached in this fight." : `Buy this tier immediately for ${cost} score.`}</span>
+                  <button data-shop="evolution-${tier}" ${owned || !canBuy || state.score < cost ? "disabled" : ""}>Buy Evolution</button>
+                </div>
+              `;
+            }).join("");
         const phaseButtons = Array.from({ length: 7 }, (_, index) => {
           const phase = index + 1;
           return `
@@ -6991,27 +7050,37 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <h1>Chrono Hold</h1>
             <p>Score ${String(Math.floor(state.score)).padStart(6, "0")}</p>
             <p>${isMobileClient ? "Tap Continue or the pause icon to resume." : "Press Esc or Continue to resume."}</p>
-            <div class="shop-grid">
-              <div class="shop-item">
-                <strong>Damage Matrix</strong>
-                <span>+5% bullet damage per purchase.</span>
-                <span>Owned ${player.damageUpgradeLevel} / 5</span>
-                <span>Cost 600 score</span>
-                <button data-shop="damage" ${player.damageUpgradeLevel >= 5 || state.score < 600 ? "disabled" : ""}>Buy Damage</button>
+            <div style="display:grid; grid-template-columns:minmax(220px, 0.95fr) minmax(0, 1.6fr); gap:18px; align-items:start;">
+              <div class="config-card" style="padding:16px 18px;">
+                <div class="title">Evolution Relay</div>
+                <div class="value" style="font-size:24px;">Current ${roman[player.evolutionLevel - 1] || "I"}</div>
+                <div class="menu-footer" style="text-align:left; margin:8px 0 14px;">
+                  Auto-evolution now builds more slowly from boss damage. Spend score here to jump tiers up to your unlocked ceiling of Evolution ${roman[maxTier - 1] || maxTier}.
+                </div>
+                ${evolutionBuyMarkup || `<div class="menu-footer" style="text-align:left;">No higher in-fight evolutions are unlocked yet.</div>`}
               </div>
-              <div class="shop-item">
-                <strong>Hull Buffer</strong>
-                <span>+0.5 max health and heal 0.5 instantly.</span>
-                <span>Owned ${player.healthBufferBuys} / 10</span>
-                <span>Cost 500 score</span>
-                <button data-shop="health" ${player.healthBufferBuys >= 10 || state.score < 500 ? "disabled" : ""}>Buy Health</button>
-              </div>
-              <div class="shop-item">
-                <strong>Hitbox Trimmer</strong>
-                <span>-5% ship hitbox per purchase.</span>
-                <span>Owned ${player.hitboxTrimBuys} / 3</span>
-                <span>Cost 700 score</span>
-                <button data-shop="hitbox" ${player.hitboxTrimBuys >= 3 || state.score < 700 ? "disabled" : ""}>Buy Hitbox</button>
+              <div class="shop-grid">
+                <div class="shop-item">
+                  <strong>Damage Matrix</strong>
+                  <span>+5% bullet damage per purchase.</span>
+                  <span>Owned ${player.damageUpgradeLevel} / 5</span>
+                  <span>Cost 600 score</span>
+                  <button data-shop="damage" ${player.damageUpgradeLevel >= 5 || state.score < 600 ? "disabled" : ""}>Buy Damage</button>
+                </div>
+                <div class="shop-item">
+                  <strong>Hull Buffer</strong>
+                  <span>+0.5 max health and heal 0.5 instantly.</span>
+                  <span>Owned ${player.healthBufferBuys} / 10</span>
+                  <span>Cost 500 score</span>
+                  <button data-shop="health" ${player.healthBufferBuys >= 10 || state.score < 500 ? "disabled" : ""}>Buy Health</button>
+                </div>
+                <div class="shop-item">
+                  <strong>Hitbox Trimmer</strong>
+                  <span>-5% ship hitbox per purchase.</span>
+                  <span>Owned ${player.hitboxTrimBuys} / 3</span>
+                  <span>Cost 700 score</span>
+                  <button data-shop="hitbox" ${player.hitboxTrimBuys >= 3 || state.score < 700 ? "disabled" : ""}>Buy Hitbox</button>
+                </div>
               </div>
             </div>
             <div class="config-actions" style="justify-content:center;">
@@ -7137,7 +7206,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       function updateEvolutionProgressFromBossDamage() {
         const maxTier = getMaxEvolutionTier();
         const progress = clamp(state.bossDamageDealt / Math.max(1, state.bossMaxHealth), 0, 1);
-        player.evolutionLevel = Math.min(maxTier, 1 + Math.floor(progress * maxTier));
+        const curvedProgress = Math.pow(progress, 1.9);
+        const autoTier = Math.min(maxTier, 1 + Math.floor(curvedProgress * maxTier));
+        player.evolutionLevel = Math.max(player.manualEvolutionTier, autoTier);
         player.risk = progress * player.riskCap;
       }
 
@@ -8090,6 +8161,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         return Math.hypot(px - cx, py - cy);
       }
 
+      function getNullBranchDistance(branch, px, py, wobble) {
+        const tipX = branch.anchorX + Math.cos(branch.angle + wobble) * branch.length;
+        const tipY = branch.anchorY + Math.sin(branch.angle - wobble) * branch.length;
+        let nearest = distanceToSegment(px, py, branch.anchorX, branch.anchorY, tipX, tipY);
+        const testForks = (baseX, baseY, baseAngle, baseLength, depth, forkCount, spread, wobbleScale = 1) => {
+          if (depth <= 0 || baseLength < 10) return;
+          for (let fork = 0; fork < forkCount; fork++) {
+            const forkProgress = 0.22 + fork / Math.max(1, forkCount) * 0.56;
+            const startX = baseX + Math.cos(baseAngle) * baseLength * forkProgress;
+            const startY = baseY + Math.sin(baseAngle) * baseLength * forkProgress;
+            const forkLength = baseLength * (0.28 + fork * 0.075);
+            const forkAngle = baseAngle + (fork % 2 === 0 ? 1 : -1) * spread * (1 + fork * 0.22) + wobble * wobbleScale;
+            const forkTipX = startX + Math.cos(forkAngle) * forkLength;
+            const forkTipY = startY + Math.sin(forkAngle) * forkLength;
+            nearest = Math.min(nearest, distanceToSegment(px, py, startX, startY, forkTipX, forkTipY));
+            testForks(startX, startY, forkAngle, forkLength * 0.7, depth - 1, Math.max(2, Math.floor(forkCount * 0.62)), spread * 0.76, wobbleScale * 0.72);
+          }
+        };
+        testForks(branch.anchorX, branch.anchorY, branch.angle, branch.length, branch.branchDepth, branch.forks, branch.forkSpread, 0.6);
+        return nearest;
+      }
+
       function bounceVelocityOffMonolith(projectile, monolith) {
         const cos = Math.cos(-monolith.angle);
         const sin = Math.sin(-monolith.angle);
@@ -8136,24 +8229,28 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         return false;
       }
 
-      function spawnNullBranch(count = 1) {
+      function spawnNullBranchVolley() {
+        const phaseTwo = state.nullBoss.phase === 2;
+        const count = phaseTwo ? 3 + Math.floor(Math.random() * 7) : 3 + Math.floor(Math.random() * 4);
+        const baseAngle = Math.random() * TAU;
         for (let i = 0; i < count; i++) {
-          const phaseTwo = state.nullBoss.phase === 2;
+          const angle = baseAngle + (i / count) * TAU + (Math.random() - 0.5) * (phaseTwo ? 0.26 : 0.18);
           state.nullBoss.branches.push({
             anchorX: state.nullBoss.x,
             anchorY: state.nullBoss.y,
-            angle: Math.random() * TAU,
+            angle,
             length: 0,
-            maxLength: (phaseTwo ? 250 : 190) + Math.random() * (phaseTwo ? 150 : 120),
-            thickness: (phaseTwo ? 22 : 16) + Math.random() * 12,
+            maxLength: (phaseTwo ? 410 : 255) + Math.random() * (phaseTwo ? 210 : 145),
+            thickness: (phaseTwo ? 34 : 24) + Math.random() * (phaseTwo ? 18 : 12),
             age: 0,
-            followTime: phaseTwo ? 0.16 + Math.random() * 0.12 : 0.22 + Math.random() * 0.16,
-            extendTime: phaseTwo ? 0.3 + Math.random() * 0.16 : 0.42 + Math.random() * 0.2,
-            retractTime: phaseTwo ? 0.36 + Math.random() * 0.18 : 0.5 + Math.random() * 0.22,
+            extendTime: phaseTwo ? 0.9 + Math.random() * 1.8 : 1.2 + Math.random() * 1.8,
+            holdTime: phaseTwo ? 2.2 + Math.random() * 3.3 : 2 + Math.random() * 3,
+            retractTime: phaseTwo ? 0.9 + Math.random() * 1.8 : 1.2 + Math.random() * 1.8,
             wobble: Math.random() * TAU,
-            scale: 0.85 + Math.random() * (phaseTwo ? 0.8 : 0.55),
-            forks: 2 + Math.floor(Math.random() * (phaseTwo ? 3 : 2)),
-            forkSpread: 0.22 + Math.random() * 0.32
+            scale: 1.08 + Math.random() * (phaseTwo ? 1.2 : 0.82),
+            forks: (phaseTwo ? 6 : 4) + Math.floor(Math.random() * (phaseTwo ? 5 : 3)),
+            forkSpread: (phaseTwo ? 0.34 : 0.26) + Math.random() * (phaseTwo ? 0.5 : 0.34),
+            branchDepth: phaseTwo ? 4 : 3
           });
         }
       }
@@ -8198,14 +8295,35 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           addSpark(n.x, n.y, "rgba(165, 110, 64, 0.95)", 44, 240);
         }
 
-        const driftX = centerX + Math.cos(state.elapsed * 0.33) * width * 0.11;
-        const driftY = height * 0.22 + Math.sin(state.elapsed * 0.41) * 28;
-        const chaseWeight = phaseTwo ? 0.68 : 0.4;
-        const targetX = driftX + (player.x - driftX) * chaseWeight;
-        const targetY = driftY + (player.y - driftY) * (phaseTwo ? 0.72 : 0.44);
-        const followRate = phaseTwo ? 3.2 : 1.92;
-        n.x += (targetX - n.x) * dt * followRate;
-        n.y += (targetY - n.y) * dt * followRate;
+        n.wanderTimer -= dt;
+        n.followPauseTimer -= dt;
+        if (phaseTwo) {
+          if (n.wanderTimer <= 0 || Math.hypot(n.targetX - n.x, n.targetY - n.y) < 34) {
+            n.wanderTimer = 2.6 + Math.random() * 1.8;
+            n.targetX = 120 + Math.random() * Math.max(40, width - 240);
+            n.targetY = 96 + Math.random() * Math.max(40, height * 0.52 - 96);
+          }
+          n.x += (n.targetX - n.x) * dt * 0.96;
+          n.y += (n.targetY - n.y) * dt * 0.88;
+        } else {
+          const observeY = clamp(player.y - 176, 92, height * 0.38);
+          if (n.followPauseTimer <= 0) {
+            n.followPauseTimer = 4.4 + Math.random() * 2.1;
+            n.targetX = player.x + (Math.random() < 0.5 ? -108 : 108) + (Math.random() - 0.5) * 18;
+            n.targetY = observeY + (Math.random() - 0.5) * 16;
+          }
+          const sideTargetX = clamp(n.targetX, 120, width - 120);
+          const sideTargetY = clamp(n.targetY, 92, height * 0.42);
+          const followTargetX = player.x;
+          const followTargetY = observeY;
+          const sideBlend = clamp(n.followPauseTimer / 1.05, 0, 0.34);
+          const targetX = lerp(followTargetX, sideTargetX, sideBlend);
+          const targetY = lerp(followTargetY, sideTargetY, sideBlend);
+          n.x += (targetX - n.x) * dt * 3.15;
+          n.y += (targetY - n.y) * dt * 2.85;
+        }
+        n.x = clamp(n.x, 96, width - 96);
+        n.y = clamp(n.y, 84, height * (phaseTwo ? 0.56 : 0.48));
 
         n.orbitAngle += dt * (phaseTwo ? 3.55 : 2.75);
         const triangleRadius = phaseTwo ? 118 : 96;
@@ -8224,9 +8342,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         n.branchTimer -= dt;
         n.monolithTimer -= dt;
         n.beamTimer -= dt;
-        while (n.branchTimer <= 0) {
-          spawnNullBranch(phaseTwo ? 2 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 2));
-          n.branchTimer += phaseTwo ? 0.16 + Math.random() * 0.14 : 0.24 + Math.random() * 0.16;
+        if (n.branchTimer <= 0) {
+          spawnNullBranchVolley();
+          n.branchTimer = phaseTwo ? 5 + Math.random() * 7 : 7 + Math.random() * 11;
         }
         if (n.monolithTimer <= 0) {
           spawnNullMonolith();
@@ -8240,21 +8358,24 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         for (let i = n.branches.length - 1; i >= 0; i--) {
           const branch = n.branches[i];
           branch.age += dt;
-          if (branch.age < branch.followTime) {
-            branch.anchorX = n.x;
-            branch.anchorY = n.y;
-          }
-          const extendEnd = branch.followTime + branch.extendTime;
-          const retractEnd = extendEnd + branch.retractTime;
+          branch.anchorX = n.x;
+          branch.anchorY = n.y;
+          const extendEnd = branch.extendTime;
+          const holdEnd = extendEnd + branch.holdTime;
+          const retractEnd = holdEnd + branch.retractTime;
           if (branch.age < extendEnd) {
-            branch.length = branch.maxLength * clamp((branch.age - branch.followTime) / branch.extendTime, 0, 1);
+            branch.length = branch.maxLength * clamp(branch.age / branch.extendTime, 0, 1);
+          } else if (branch.age < holdEnd) {
+            branch.length = branch.maxLength;
           } else {
-            branch.length = branch.maxLength * (1 - clamp((branch.age - extendEnd) / branch.retractTime, 0, 1));
+            branch.length = branch.maxLength * (1 - clamp((branch.age - holdEnd) / branch.retractTime, 0, 1));
           }
-          const wobble = Math.sin(state.elapsed * 7 + branch.wobble + branch.age * 9) * 0.35;
-          const tipX = branch.anchorX + Math.cos(branch.angle + wobble) * branch.length;
-          const tipY = branch.anchorY + Math.sin(branch.angle - wobble) * branch.length;
-          const branchDistance = distanceToSegment(player.x, player.y, branch.anchorX, branch.anchorY, tipX, tipY);
+          const wobble = Math.sin(
+            state.elapsed * (phaseTwo ? 2.6 : 7) +
+            branch.wobble +
+            branch.age * (phaseTwo ? 3.4 : 9)
+          ) * (phaseTwo ? 0.22 : 0.35);
+          const branchDistance = getNullBranchDistance(branch, player.x, player.y, wobble);
           nearest = Math.min(nearest, branchDistance);
           if (branchDistance < 110) closeCount++;
           if (branchDistance < player.hitRadius + branch.thickness * 0.45) {
@@ -12351,13 +12472,13 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           2: [-0.08, 0.08],
           3: [0, -0.16, 0.16],
           4: [0, -0.12, 0.12, -0.24, 0.24],
-          5: [0, -0.1, 0.1, -0.2, 0.2, -0.32, 0.32],
-          6: [0, -0.08, 0.08, -0.16, 0.16, -0.26, 0.26, -0.38, 0.38],
-          7: [0, -0.07, 0.07, -0.14, 0.14, -0.22, 0.22, -0.31, 0.31, -0.42, 0.42],
-          8: [0, -0.06, 0.06, -0.12, 0.12, -0.19, 0.19, -0.27, 0.27, -0.36, 0.36, -0.46, 0.46],
-          9: [0, -0.05, 0.05, -0.1, 0.1, -0.16, 0.16, -0.23, 0.23, -0.31, 0.31, -0.4, 0.4, -0.5, 0.5],
-          10: [0, -0.045, 0.045, -0.09, 0.09, -0.135, 0.135, -0.19, 0.19, -0.255, 0.255, -0.33, 0.33, -0.415, 0.415, -0.51, 0.51],
-          11: [0, -0.04, 0.04, -0.08, 0.08, -0.12, 0.12, -0.17, 0.17, -0.23, 0.23, -0.3, 0.3, -0.38, 0.38, -0.47, 0.47, -0.57, 0.57]
+          5: [0, -0.12, 0.12, -0.24, 0.24],
+          6: [0, -0.12, 0.12, -0.24, 0.24],
+          7: [0, -0.12, 0.12, -0.24, 0.24],
+          8: [0, -0.12, 0.12, -0.24, 0.24],
+          9: [0, -0.12, 0.12, -0.24, 0.24],
+          10: [0, -0.12, 0.12, -0.24, 0.24],
+          11: [0, -0.12, 0.12, -0.24, 0.24]
         };
         const baseOffsets = challengeForcesShotgunMode()
           ? [-0.42, -0.27, -0.14, 0, 0.14, 0.27, 0.42]
@@ -12398,7 +12519,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         const macroActive = state.macroBurstTimer > 0;
         const rootActive = state.rootOverrideTimer > 0;
         const codeBoost = rootActive ? 1.3 : macroActive ? 1.18 : 1;
-        const shotDamage = ((1 + (level - 1) * 0.45) * player.damageMultiplier * (bruteforceActive ? 1.15 : 1) * codeBoost) * getChallengeShotDamageMultiplier();
+        const shotDamage = (player.damageMultiplier * (bruteforceActive ? 1.15 : 1) * codeBoost) * getChallengeShotDamageMultiplier();
         const shotLife = focusedFire ? (focusLife[level] || 1.2) : 1.2;
         const primaryMeta = getSelectedPrimaryBulletMeta();
         if (primaryMeta.type === "orbital_strike") {
@@ -15166,49 +15287,87 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
         for (const branch of state.nullBoss.branches) {
-          const wobble = Math.sin(state.elapsed * 7 + branch.wobble + branch.age * 9) * 0.35;
+          const phaseTwoBranch = state.nullBoss.phase === 2;
+          const wobble = Math.sin(
+            state.elapsed * (phaseTwoBranch ? 2.6 : 7) +
+            branch.wobble +
+            branch.age * (phaseTwoBranch ? 3.4 : 9)
+          ) * (phaseTwoBranch ? 0.22 : 0.35);
           const tipX = branch.anchorX + Math.cos(branch.angle + wobble) * branch.length;
           const tipY = branch.anchorY + Math.sin(branch.angle - wobble) * branch.length;
           const branchAlpha = clamp(branch.length / Math.max(1, branch.maxLength), 0, 1);
-          ctx.strokeStyle = "rgba(140, 88, 42, 0.75)";
-          ctx.lineWidth = branch.thickness * 0.32;
+          ctx.strokeStyle = phaseTwoBranch
+            ? `rgba(78, 46, 28, 0.94)`
+            : `rgba(112, 70, 38, 0.86)`;
+          ctx.lineWidth = branch.thickness * (phaseTwoBranch ? 0.52 : 0.44);
           ctx.beginPath();
           ctx.moveTo(branch.anchorX, branch.anchorY);
           ctx.lineTo(tipX, tipY);
           ctx.stroke();
-          ctx.strokeStyle = "rgba(255, 142, 70, 0.3)";
-          ctx.lineWidth = branch.thickness * 0.7;
-          ctx.beginPath();
-          ctx.moveTo(branch.anchorX, branch.anchorY);
-          ctx.lineTo(tipX, tipY);
-          ctx.stroke();
-          ctx.fillStyle = `rgba(255, 176, 102, ${0.08 + branchAlpha * 0.16})`;
-          ctx.beginPath();
-          ctx.arc(tipX, tipY, Math.max(3, branch.thickness * 0.18), 0, TAU);
-          ctx.fill();
-
-          for (let fork = 0; fork < branch.forks; fork++) {
-            const forkProgress = 0.35 + fork / Math.max(1, branch.forks) * 0.45;
-            const baseX = branch.anchorX + (tipX - branch.anchorX) * forkProgress;
-            const baseY = branch.anchorY + (tipY - branch.anchorY) * forkProgress;
-            const forkLength = branch.length * (0.2 + fork * 0.08);
-            const forkAngle = branch.angle + (fork % 2 === 0 ? 1 : -1) * branch.forkSpread * (1 + fork * 0.35) + wobble * 0.6;
-            const forkTipX = baseX + Math.cos(forkAngle) * forkLength;
-            const forkTipY = baseY + Math.sin(forkAngle) * forkLength;
-            ctx.strokeStyle = `rgba(176, 108, 58, ${0.32 + branchAlpha * 0.24})`;
-            ctx.lineWidth = Math.max(1.6, branch.thickness * (0.14 - fork * 0.015));
+          if (phaseTwoBranch) {
+            ctx.strokeStyle = `rgba(124, 80, 46, ${0.68 + branchAlpha * 0.14})`;
+            ctx.lineWidth = branch.thickness * 0.78;
             ctx.beginPath();
-            ctx.moveTo(baseX, baseY);
-            ctx.lineTo(forkTipX, forkTipY);
-            ctx.stroke();
-
-            ctx.strokeStyle = `rgba(255, 146, 78, ${0.14 + branchAlpha * 0.16})`;
-            ctx.lineWidth = Math.max(1, branch.thickness * (0.28 - fork * 0.02));
-            ctx.beginPath();
-            ctx.moveTo(baseX, baseY);
-            ctx.lineTo(forkTipX, forkTipY);
+            ctx.moveTo(branch.anchorX, branch.anchorY);
+            ctx.lineTo(tipX, tipY);
             ctx.stroke();
           }
+          ctx.strokeStyle = phaseTwoBranch
+            ? `rgba(255, 132, 76, ${0.24 + branchAlpha * 0.12})`
+            : `rgba(255, 132, 76, ${0.34 + branchAlpha * 0.2})`;
+          ctx.lineWidth = branch.thickness * (phaseTwoBranch ? 0.88 : 0.96);
+          ctx.beginPath();
+          ctx.moveTo(branch.anchorX, branch.anchorY);
+          ctx.lineTo(tipX, tipY);
+          ctx.stroke();
+          ctx.fillStyle = phaseTwoBranch
+            ? `rgba(255, 194, 132, ${0.24 + branchAlpha * 0.18})`
+            : `rgba(255, 194, 132, ${0.2 + branchAlpha * 0.26})`;
+          ctx.beginPath();
+          ctx.arc(tipX, tipY, Math.max(4, branch.thickness * 0.22), 0, TAU);
+          ctx.fill();
+          const drawForks = (baseX, baseY, baseAngle, baseLength, baseThickness, depth, forkCount, spread, wobbleScale = 1) => {
+            if (depth <= 0 || baseLength < 10 || baseThickness < 1.2) return;
+            for (let fork = 0; fork < forkCount; fork++) {
+              const forkProgress = 0.22 + fork / Math.max(1, forkCount) * 0.56;
+              const startX = baseX + Math.cos(baseAngle) * baseLength * forkProgress;
+              const startY = baseY + Math.sin(baseAngle) * baseLength * forkProgress;
+              const forkLength = baseLength * (0.28 + fork * 0.075);
+              const forkAngle = baseAngle + (fork % 2 === 0 ? 1 : -1) * spread * (1 + fork * 0.22) + wobble * wobbleScale;
+              const forkTipX = startX + Math.cos(forkAngle) * forkLength;
+              const forkTipY = startY + Math.sin(forkAngle) * forkLength;
+              ctx.strokeStyle = phaseTwoBranch
+                ? `rgba(88, 56, 32, ${0.72 + branchAlpha * 0.14})`
+                : `rgba(132, 82, 46, ${0.48 + branchAlpha * 0.26})`;
+              ctx.lineWidth = Math.max(1.5, baseThickness * (phaseTwoBranch ? 0.72 : 0.62));
+              ctx.beginPath();
+              ctx.moveTo(startX, startY);
+              ctx.lineTo(forkTipX, forkTipY);
+              ctx.stroke();
+
+              ctx.strokeStyle = phaseTwoBranch
+                ? `rgba(255, 150, 84, ${0.18 + branchAlpha * 0.12})`
+                : `rgba(255, 150, 84, ${0.24 + branchAlpha * 0.22})`;
+              ctx.lineWidth = Math.max(1, baseThickness * (phaseTwoBranch ? 0.82 : 1.02));
+              ctx.beginPath();
+              ctx.moveTo(startX, startY);
+              ctx.lineTo(forkTipX, forkTipY);
+              ctx.stroke();
+
+              drawForks(
+                startX,
+                startY,
+                forkAngle,
+                forkLength * 0.7,
+                baseThickness * 0.74,
+                depth - 1,
+                Math.max(2, Math.floor(forkCount * 0.62)),
+                spread * 0.76,
+                wobbleScale * 0.72
+              );
+            }
+          };
+          drawForks(branch.anchorX, branch.anchorY, branch.angle, branch.length, branch.thickness * 0.36, branch.branchDepth, branch.forks, branch.forkSpread, 0.6);
         }
 
         for (const beam of state.nullBoss.beams) {
@@ -23742,6 +23901,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         if (target.dataset.shop === "damage") buyDamageUpgrade();
         if (target.dataset.shop === "health") buyHealthBuffer();
         if (target.dataset.shop === "hitbox") buyHitboxTrim();
+        if (target.dataset.shop.startsWith("evolution-")) {
+          buyEvolutionUpgrade(Number(target.dataset.shop.replace("evolution-", "")));
+        }
       });
       overlay.addEventListener("input", (event) => {
         if (event.target.id === "volumeSlider") {
